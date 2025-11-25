@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { width: 300px; font-family: sans-serif; padding: 10px; }
+    input, select, button { width: 100%; margin-bottom: 10px; padding: 5px; }
+    label { font-weight: bold; display: block; margin-bottom: 5px; }
+    #status { margin-top: 10px; font-size: 0.9em; }
+    .success { color: green; }
+    .error { color: red; }
+  </style>
+</head>
+<body>
+  <h3>Log Job Application</h3>
+  
+  <label for="company">Company</label>
+  <input type="text" id="company" placeholder="Company Name">
+
+  <label for="role">Role</label>
+  <input type="text" id="role" placeholder="Job Title">
+
+  <label for="url">URL</label>
+  <input type="text" id="url" readonly>
+
+  <label for="date">Date</label>
+  <input type="date" id="date">
+
+  <button id="saveBtn">Log Application</button>
+  <div id="status"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Job Application Manager</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th,
+        td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        .stats {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            flex: 1;
+            text-align: center;
+        }
+
+        .card h3 {
+            margin: 0;
+            font-size: 2em;
+        }
+
+        .card p {
+            margin: 5px 0 0;
+            color: #666;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Job Application Manager</h1>
+
+    <div class="stats">
+        <div class="card">
+            <h3 id="total-count">0</h3>
+            <p>Total Applications</p>
+        </div>
+        <div class="card">
+            <h3 id="pending-count">0</h3>
+            <p>Pending</p>
+        </div>
+    </div>
+
+    <table id="job-table">
+        <thead>
+            <tr>
+                <th>Company</th>
+                <th>Role</th>
+                <th>Date</th>
+                <th>Status</th>
+                <th>Link</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Rows will be added here -->
+        </tbody>
+    </table>
+
+    <script>
+        async function loadData() {
+            try {
+                const response = await fetch('/data');
+                const jobs = await response.json();
+
+                const tbody = document.querySelector('#job-table tbody');
+                tbody.innerHTML = '';
+
+                let pending = 0;
+
+                jobs.forEach(job => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${job.Company}</td>
+                        <td>${job.Role}</td>
+                        <td>${job.Date}</td>
+                        <td>${job.Status}</td>
+                        <td><a href="${job.URL}" target="_blank">Link</a></td>
+                    `;
+                    tbody.appendChild(row);
+
+                    if (job.Status === 'Applied') pending++;
+                });
+
+                document.getElementById('total-count').textContent = jobs.length;
+                document.getElementById('pending-count').textContent = pending;
+            } catch (e) {
+                console.error("Error loading data:", e);
+            }
+        }
+
+        loadData();
+        setInterval(loadData, 5000); // Refresh every 5s
+    </script>
+</body>
+
+</html>
