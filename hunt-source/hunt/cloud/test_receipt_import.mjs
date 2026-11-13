@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import {webcrypto} from 'node:crypto';
+import {readFileSync} from 'node:fs';
+globalThis.crypto??=webcrypto;
+globalThis.WRITING_PROFILE=JSON.parse(readFileSync(new URL('../writing-profile.json',import.meta.url)));
+globalThis.DRAFTING_INSTRUCTIONS=readFileSync(new URL('../drafting-instructions.txt',import.meta.url),'utf8');
+globalThis.ASSETS={};
+const app=await import('./server.mjs');
+class Bucket{data=new Map();async get(k){const v=this.data.get(k);return v?{json:async()=>JSON.parse(v)}:null}async put(k,v,o={}){if(o.onlyIf?.etagDoesNotMatch==='*'&&this.data.has(k))return null;this.data.set(k,v);return {etag:'1'}}async list({prefix}){return {objects:[...this.data.keys()].filter(k=>k.startsWith(prefix)).map(key=>({key})),truncated:false}}}
+const bucket=new Bucket();
+const receipt={provider:'gmail',message_id:'1a1d3f5f742a4f08',thread_id:'1a1d3f37178ca22e',sent_at:'2026-11-13T08:11:14Z',from:'majekadegbeaminat85@gmail.com',to:'careers@whitecircle.ai',company:'White Circle',role:'Recruiter',subject:'Different searches. One recruiter who builds the plumbing.',attachment:{filename:'Aminat-Majekadegbe-White-Circle-CV.pdf',bytes:16264,sha256:'de027b2d61cca818f27604812e42e1325f70e809627d1ef44488c544b42ebc37'},owner_approved:true,gmail_sent_label_verified:true,evidence_url:'https://mail.google.com/mail/u/majekadegbeaminat85@gmail.com/#sent/1a1d3f37178ca22e'};
+assert.equal((await app.importEmailReceipt(bucket,receipt)).replayed,false);
+assert.equal((await app.importEmailReceipt(bucket,receipt)).replayed,true);
+assert.equal(bucket.data.size,1);
+await assert.rejects(()=>app.importEmailReceipt(bucket,{...receipt,subject:'Changed'}),/different receipt/);
+await assert.rejects(()=>app.importEmailReceipt(bucket,{...receipt,owner_approved:false}),/approval/);
+await assert.rejects(()=>app.importEmailReceipt(bucket,{...receipt,from:'other@example.com'}),/sender/);
+const schedule=app.discoverySchedule(Date.parse('2026-11-13T08:30:00Z'));
+assert.equal(schedule.next_run,'2026-11-13T11:00:00.000Z');
+console.log('7 receipt identity, approval, deduplication and schedule checks passed');
