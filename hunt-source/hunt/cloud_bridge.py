@@ -17,7 +17,7 @@ class PrivateBridge:
         self.url=url.rstrip('/');self.token=token;self.last_digest=None
     def request(self,path,body=None):
         if path not in ('/api/bridge/state','/api/bridge/snapshot','/api/bridge/commands','/api/bridge/ack'):raise ValueError('Bridge action denied')
-        req=Request(self.url+path,data=hunt.dump(body).encode() if body is not None else None,headers={'OAI-Sites-Authorization':'Bearer '+self.token,'Content-Type':'application/json'})
+        req=Request(self.url+path,data=hunt.dump(body).encode() if body is not None else None,headers={'OAI-Sites-Authorization':'Bearer '+self.token,'X-HUNT-Service-Authorization':self.token,'Content-Type':'application/json'})
         try:
             with build_opener(hunt.NoRedirect).open(req,timeout=45) as r:return json.load(r)
         except HTTPError as e:raise RuntimeError('Private Site HTTP '+str(e.code)) from None
