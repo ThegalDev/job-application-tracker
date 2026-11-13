@@ -1,0 +1,1 @@
+{"name":"hunt-private-review-console","private":true,"type":"module","scripts":{"build":"python3 build-cloud.py","test":"node test_cloud.mjs"}}

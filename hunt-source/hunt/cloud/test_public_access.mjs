@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+import {webcrypto} from 'node:crypto';
+import {readFileSync} from 'node:fs';
+globalThis.crypto??=webcrypto;
+globalThis.WRITING_PROFILE=JSON.parse(readFileSync(new URL('../writing-profile.json',import.meta.url)));
+globalThis.DRAFTING_INSTRUCTIONS=readFileSync(new URL('../drafting-instructions.txt',import.meta.url),'utf8');
+globalThis.ASSETS={'/':'<h1>HUNT</h1>','/app.js':'/* asset */','/style.css':'body{}'};
+const app=await import('./server.mjs');
+class Bucket{data=new Map();async get(k){return this.data.has(k)?{json:async()=>JSON.parse(this.data.get(k))}:null}async put(k,v){this.data.set(k,v);return {etag:'1'}}async list({prefix}){return {objects:[...this.data.keys()].filter(k=>k.startsWith(prefix)).map(key=>({key})),truncated:false}}async delete(k){this.data.delete(k)}}
+const bucket=new Bucket();await bucket.put('hunt/owner.json',JSON.stringify({id:'owner'}));await bucket.put('hunt/snapshot.json',JSON.stringify({snapshot:{at:'2026-11-13',jobs:[],applications:[{id:'one',company:'Fixture',role:'Recruiter'}],facts:[],packages:[{id:'package',resume_full:'User-authorized public CV'}],sources:[],events:[]}}));
+const env={BUCKET:bucket,HUNT_PUBLIC_READ:'true',HUNT_BRIDGE_SECRET:'fixture-service-secret',OPENAI_API_KEY:'fixture-private-key'};
+const request=(path,opts={})=>app.handle(new Request('https://hunt.example'+path,opts),env);
+assert.equal((await request('/')).status,200);
+const state=await (await request('/api/state')).json();assert.equal(state.public_view,true);assert.equal(state.applications.length,1);assert.equal(state.csrf,'');assert.ok(!JSON.stringify(state).includes('fixture-private-key'));
+assert.equal((await request('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:'{"trigger":"discovery"}'})).status,401);
+assert.equal((await request('/api/bridge/state')).status,401);
+assert.equal((await request('/api/bridge/state',{headers:{'X-HUNT-Service-Authorization':'wrong'}})).status,401);
+assert.equal((await request('/api/bridge/state',{headers:{'X-HUNT-Service-Authorization':'fixture-service-secret'}})).status,200);
+assert.equal((await request('/api/package?id=package')).status,200);
+assert.equal((await request('/api/draft-failures')).status,403);
+console.log('11 public-view, secret isolation and owner/service write-boundary checks passed');

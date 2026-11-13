@@ -1,0 +1,74 @@
+{
+  "version": "aminat-2026-11-12-r2",
+  "provenance": [
+    {
+      "thread": "6aea4121-1e18-83ea-88cd-f40ed8600515",
+      "instruction": "Do not shorten the CV. Change the summary and emphasize relevant bullet points.",
+      "turn": "6aa25bb9-9b86-4725-a2f3-1faa289de9c4"
+    },
+    {
+      "thread": "01a17828-683f-7613-a65e-aa1999fd4f67",
+      "instruction": "Storytelling, witty specific subject, employer first before self; no generic excited opener; show ownership rather than errands; ask founder to put application before actual hiring owner.",
+      "turns": [
+        "01a1794d-1da8-7551-8372-e53dbb950ad8",
+        "01a17951-7d42-7551-85eb-266fd269cdd7",
+        "01a17955-477f-7b53-8185-ad4bae038d7e"
+      ],
+      "rejected_examples": [
+        "Reducing People Operations ownership to booking chairs",
+        "Asking a cofounder for a generic short conversation"
+      ]
+    }
+  ],
+  "cover_letter": {
+    "opening": "Start with a specific verified employer problem, work or role need. Write a natural story connecting it to relevant documented candidate work.",
+    "voice": "Warm, human, clear, observant and specific; restrained wit where natural. Avoid corporate filler and exaggerated praise.",
+    "structure": "Use short paragraphs: an exact employer/role need first, one documented piece of candidate work as a small practical story (problem, actual work, relevance), an honest bridge to the role and a direct application-focused close. Do not narrate an invented incident or dump every achievement. Return body only; the app adds greeting, real portfolio link and signature locally.",
+    "avoid": [
+      "I hope this email finds you well",
+      "I am excited to apply",
+      "generic flattery",
+      "unsupported metrics",
+      "invented anecdotes",
+      "laundry list of responsibilities",
+      "resonates deeply",
+      "inspiring mission",
+      "operational excellence",
+      "operational rigor",
+      "human touch",
+      "proven track record",
+      "expert",
+      "transformative",
+      "vibrant team",
+      "placeholder links"
+    ]
+  },
+  "cold_email": {
+    "subject": "Specific, intriguing, lightly witty where appropriate; honest about the role and purpose, never deceptive.",
+    "opening": "Start with the employer, never a generic self-introduction.",
+    "body": "One short, concrete evidence-backed story of a documented workflow: explain the operational problem and exactly what the candidate actually did. Use plain conversational sentences, a light specific subject and two or three short paragraphs. Do not claim personal involvement in the employer mission. Do not list all eight facts.",
+    "cta": "Ask the recipient to put the application before the actual hiring owner when appropriate. Do not default to asking a founder for a short conversation."
+  },
+  "cv": {
+    "preserve_all_content": true,
+    "allowed_changes": [
+      "Replace professional summary using verified evidence",
+      "Emphasize relevant existing bullets without deleting or fabricating them"
+    ],
+    "disallowed_changes": [
+      "Shortening employment history",
+      "Removing projects, certifications, training or qualifications",
+      "Adding unverified skills, metrics or experience"
+    ]
+  },
+  "evidence_rules": [
+    "Only the eight API-approved fact IDs may be sent to the model.",
+    "Use only public job information for employer-specific claims.",
+    "No email content, contact details, full CV, private anecdotes or reference URLs in model input.",
+    "Every candidate claim requires existing fact IDs. Drafts require owner review.",
+    "Generated numbers must occur in the selected candidate fact evidence, never copied from an employer requirement as a candidate accomplishment.",
+    "Coordinating onboarding does not prove designing or building an onboarding programme. Preserve the documented level of ownership.",
+    "No invented scenes, deadlines, employee cohorts, industry experience, praise implying prior mission involvement, or promised work samples.",
+    "Do not use bracketed placeholders or ask the model to supply the portfolio URL; the app inserts known links locally."
+  ]
+}

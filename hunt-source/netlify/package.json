@@ -1,0 +1,8 @@
+{
+  "name": "hunt-netlify",
+  "private": true,
+  "type": "module",
+  "scripts": {"build": "node build.mjs", "test": "node --test test-storage.mjs"},
+  "dependencies": {"@netlify/blobs": "^10.7.12"},
+  "engines": {"node": ">=22"}
+}

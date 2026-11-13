@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import vm from 'node:vm';
+const source=readFileSync(new URL('../web/app.js',import.meta.url),'utf8');
+const begin=source.indexOf('function isFreshRemote('),end=source.indexOf('function activeJobs(');
+const context=vm.createContext({state:{hosted:true}});
+vm.runInContext(source.slice(begin,end),context);
+const base={open:1,remote:true,global_remote:true,freshness:'publication_unverified',within_discovery_window:false,assessment:{tier:'B',status:'Review',compensation:{status:'meets_floor'},duplicate_applications:[]}};
+assert.equal(context.needsVerification(base),true,'Undated relevant lead remains visible for investigation');
+assert.equal(context.isFreshRemote(base),false,'Undated lead cannot enter confirmed fresh results');
+for(const freshness of ['older_than_48_hours','future_timestamp'])assert.equal(context.needsVerification({...base,freshness}),false);
+assert.equal(context.needsVerification({...base,assessment:{...base.assessment,tier:'D'}}),false);
+assert.equal(context.needsVerification({...base,assessment:{...base.assessment,duplicate_applications:[{}]}}),false);
+assert.equal(context.needsVerification({...base,within_discovery_window:true,freshness:'within_48_hours'}),false);
+assert.equal(context.needsVerification({...base,global_remote:false,location:'Remote — Nigeria'}),true);
+console.log('8 lead visibility checks passed');
