@@ -23,5 +23,12 @@ export async function bootstrap(bucket){
   await put('hunt/runtime/runs.json',snapshot.cloud_runs||[]);
   await put('hunt/runtime/reports.json',[]);
   await put('hunt/control.json',{paused:snapshot.paused===true});
+  // Recover the master only from a package whose exact text hashes to the
+  // verified original CV hash. A tailored summary must never become master.
+  for(const p of packages){
+    if(!p.resume_full||!p.full_cv_source_hash)continue;
+    const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(p.resume_full))),x=>x.toString(16).padStart(2,'0')).join('');
+    if(hash===p.full_cv_source_hash){await put('hunt/private/master-cv.json',{text:p.resume_full,sha256:hash,source_url:p.full_cv_source_url||'https://docs.google.com/document/d/1u9NQcSpOF1jRwHUmN-LeKZTWazENUoQjvYV8xzkLsGQ/edit',stored_at:new Date().toISOString()});break;}
+  }
   await put('hunt/snapshot.json',{snapshot,stored_at:new Date().toISOString(),migration:{from:SOURCE,one_time:true}});
 }
