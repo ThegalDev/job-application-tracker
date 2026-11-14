@@ -39,11 +39,11 @@ const meta=await request('/api/bridge/state',{user:null});assert.equal(meta.data
 const stored=JSON.parse(env.BUCKET.data.get('hunt/snapshot.json'));assert.equal(stored.snapshot.csrf,undefined);assert.equal(stored.snapshot.session_token,undefined);
 assert.equal((await request('/api/bridge/snapshot',{user:null,method:'POST',body:{snapshot:{...snapshot,api_key:'fake'}}})).response.status,400);
 assert.equal((await request('/api/package',{method:'POST',body:{job_id:'missing'},token,origin:base})).response.status,400);
-const j={id:'job',open:1,raw_hash:'version',verified:new Date().toISOString(),assessment:{tier:'A',score:90,duplicate_applications:[],compensation:{status:'unknown',monthly_min:null}}};
+const j={id:'job',title:'Recruiter',company:'Fixture',location:'Remote worldwide',remote:true,description:'Own recruiting workflows.',open:1,raw_hash:'version',verified:new Date().toISOString(),assessment:{tier:'A',score:90,duplicate_applications:[],compensation:{status:'unknown',monthly_min:null}}};
 const p={id:'package',job_id:'job',job_version:'version',payload_hash:'a'.repeat(64)};
 await request('/api/bridge/snapshot',{user:null,method:'POST',body:{snapshot:{...snapshot,jobs:[j],packages:[p]}}});
 assert.equal((await request('/api/review',{method:'POST',body:{package_id:'package',decision:'approved_for_manual_action'},token,origin:base})).response.status,400);
-j.assessment.compensation={status:'meets_floor',monthly_min:2500};
+j.assessment.compensation={status:'meets_floor',monthly_min:2500};j.description+=' USD 2500 per month.';
 await request('/api/bridge/snapshot',{user:null,method:'POST',body:{snapshot:{...snapshot,jobs:[j],packages:[p]}}});
 const review=await request('/api/review',{method:'POST',body:{package_id:'package',decision:'approved_for_manual_action'},token,origin:base});assert.equal(review.response.status,202);
 commands=await request('/api/bridge/commands',{user:null});const c=commands.data.commands.find(x=>x.type==='review');assert.equal(c.payload.payload_hash,p.payload_hash);assert.equal(c.payload.job_version,'version');

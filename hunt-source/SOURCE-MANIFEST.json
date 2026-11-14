@@ -1,6 +1,6 @@
 {
   "source_folder": "/Users/theoneglobal/Documents/Codex/2026-11-12/referenced-chatgpt-conversation-this-is-an/outputs/hunt",
-  "file_count": 51,
+  "file_count": 52,
   "files": [
     {
       "path": "hunt/CONNECTOR-BRIDGE.md",
@@ -44,8 +44,8 @@
     },
     {
       "path": "hunt/cloud/server.mjs",
-      "bytes": 95761,
-      "sha256": "bd3f7aab34086ce2d37189c807ccbfc4fe92970f5005c3457cfc06d6e4f31653"
+      "bytes": 97926,
+      "sha256": "09c22e27fe010a446c02f0f4ce14a0e27e1c9575e8b7d01dca7c428f15d0dcbc"
     },
     {
       "path": "hunt/cloud/test_action_controls.mjs",
@@ -54,8 +54,8 @@
     },
     {
       "path": "hunt/cloud/test_cloud.mjs",
-      "bytes": 6026,
-      "sha256": "d861c0af6599257b7df746d884412288e19be5cb7a3e55816df85b9f107efdac"
+      "bytes": 6180,
+      "sha256": "fec070842510221be602216d1ecd47a48217d8c186172b36f67a58b01090e278"
     },
     {
       "path": "hunt/cloud/test_cloud_transport.mjs",
@@ -76,6 +76,11 @@
       "path": "hunt/cloud/test_lead_visibility.mjs",
       "bytes": 1497,
       "sha256": "0f2eea5f5a0877785a09093eb137bb8073462d0d222783b4df4e82404cdc852b"
+    },
+    {
+      "path": "hunt/cloud/test_owner_discovery_audit.mjs",
+      "bytes": 4241,
+      "sha256": "fb9575d9ed7705db1918c79da151d85ce454f260eabbe5c1788524e2d7d76119"
     },
     {
       "path": "hunt/cloud/test_public_access.mjs",
@@ -239,8 +244,8 @@
     },
     {
       "path": "hunt/web/app.js",
-      "bytes": 35019,
-      "sha256": "1193905adcc15b2c5516609c7581af54b1565d89ca0f0ebe5470613cadc6b0a1"
+      "bytes": 36603,
+      "sha256": "d06a007d2cc44257d6a287523f8e3414a8f78905e8fedeb6e70f47d573368409"
     },
     {
       "path": "hunt/web/index.html",
