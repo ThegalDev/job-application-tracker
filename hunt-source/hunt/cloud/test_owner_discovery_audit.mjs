@@ -18,7 +18,7 @@ test('saved irrelevant roles and explicit foreign-only regions are excluded on a
     const a=app.assess(role(title),{facts:[]});
     assert.equal(a.tier,'D');assert.equal(a.role_relevant,false);assert.equal(a.status,'Excluded');
   }
-  for(const location of ['European Union','Remote (Central & South America)']) assert.equal(app.assess(role('People Operations Partner',{location}),{facts:[]}).tier,'D');
+  for(const location of ['European Union','Remote (Central & South America)','Remote, Pune, India','Remote, Amsterdam, Netherlands']) assert.equal(app.assess(role('People Operations Partner',{location}),{facts:[]}).tier,'D');
   assert.equal(app.assess(role('Talent Acquisition Partner'),{facts:[]}).role_relevant,true);
 });
 
