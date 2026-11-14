@@ -1,40 +1,43 @@
-> Current verified status: see ../HUNT-live-fix-status.md. Earlier descriptions below are historical where they conflict.
+# HUNT — Aminat's job application workspace
 
-# HUNT — Aminat’s career workspace
+HUNT is being rebuilt around the workflow you requested: find recent relevant roles, prepare a full tailored CV and story-led application, identify a hiring contact, then apply only after reviewing the exact application.
 
-Open the private phone dashboard: https://hunt-aminat-career-workspace.youremowriter.chatgpt.site
+The source changes in this checkout are **not deployed** to the hosted phone dashboard yet. The current hosted release and the code here may differ until a new private deployment is made.
 
-Sign in with the owner ChatGPT account. The console is private. It contains 72 preserved application records, verified evidence, job research and current drafts. No employer messages or applications have been sent.
+## Job discovery
 
-## Test it step by step
+The hosted source now searches configured Greenhouse, Ashby and Lever boards; We Work Remotely; Remotive; Jobicy; Startup Jobs RSS; RemoteOK; a16z portfolio jobs; and YC Work at a Startup Recruiting & HR/Operations remote pages. YC detail pages provide structured role, location and datePosted metadata. Aggregator/listing dates remain separate from employer-original dates.
 
-1. Open Overview. Confirm 72 applications. “Salary-qualified priorities” can correctly be zero: HUNT blocks approval when pay is unknown or below $2,500/month.
-2. Open Applications. Check Moniepoint People Business Partner, Ben Talent Acquisition Partner and Sieve Talent Ops show their verified rejections. micro1 HR & People Operations Expert remains AI interview completed.
-3. Open Opportunities and review a role. Check its original employer link, location eligibility, compensation status, weighted score and evidence. AI relevance is labelled as inference.
-4. Open Agents & schedule. Inspect the latest pipeline run: it read 40 recruiting messages and all 72 tracker records. A successful read is not a sent application.
-5. To test discovery, choose Run the agent workflow. The phone console queues work for the Mac runner; queued means waiting, not completed. Keep this Mac and Codex available, then inspect the run result.
-6. Open Application studio to read the current draft. Unknown compensation blocks approval. Rejecting or recording review does not send anything.
-7. Open Reports & actions to inspect next actions and daily/weekly reports. Ambiguous mail events need review; HUNT does not silently guess their application.
-8. Pause HUNT if needed. The phone pause is synced to the runner. Unpause to resume processing.
+The Opportunities view has a `Recent remote posts · all status` filter so a fresh role is visible even when location, pay or employer-original date is unconfirmed. The stricter verified view remains separate. Current approval gates require explicit Nigeria/global eligibility, at least USD $2,500/month, no existing application, an open/current job, and an exact package version. These gates do not hide recent leads in the new view.
 
-## What is automatic
+LinkedIn and X are not scraped or searched with private account sessions. They need approved platform access or a separate authorized search connector. Do not send account passwords, cookies or API keys in chat. YC Work at a Startup is the YC job source; the former “VC Bucket” reference was a misunderstanding.
 
-Registered desktop operations run at 07:00, 08:00, 12:00, 16:00 and 18:00 Africa/Lagos; weekly review Friday 18:30. Future scheduled execution has not yet been observed. This Mac and Codex must be available. The current phone runner checks for commands about once a minute. Independent always-on cloud execution remains pending.
+The 48-hour source-post window controls which recent leads are surfaced. Nigeria eligibility, remote scope, salary and employer-original posting time are separate evidence checks. Unverified leads remain visible in the verification queue rather than being presented as confirmed matches.
 
-## Google and AI access
+## Application materials
 
-HUNT has its own authorized Google connection: recruitment Gmail read access and Google Sheets access. The adapter restricts spreadsheet operations to the specified application tracker. The first runtime reconciliation read 40 messages and preserved all 72 records, with zero Sheet writes. Sending is disabled and no Gmail send scope was granted.
+HUNT preserves the full master CV. For each job, it changes the target-role headline and summary, then adds up to three role-matched, source-verbatim project highlights near the top. The original work history, projects, training and qualifications remain in the document. The writing model receives approved fact excerpts and selected project excerpts, never the full CV.
 
-The approved OpenAI integration uses only the eight verified work-experience excerpts and public job descriptions. API response storage is disabled. Keys, Google client secrets and refresh credentials remain outside this deliverable folder. Do not move the app without arranging its credentials securely.
+Cover letters begin with the employer's actual role need, tell a short evidence-based story, and include a small set of relevant project bullets. Claims and numbers must trace to source evidence; prose still requires your review.
 
-## Local dashboard
+## Contacts and applying
 
-Double-click Start HUNT.command. The private local dashboard opens at http://127.0.0.1:8765/. Keep its Terminal open. The phone dashboard is separately hosted; its worker does not run the Python agents itself.
+Apollo People API Search can return professional titles and LinkedIn profiles without credits, but it does not return email addresses. Apollo documents free-account API eligibility as conditional on a work email and other requirements. Email enrichment is a separate API call that may consume credits. HUNT does not reveal an email or message anyone automatically. To enable search, create an Apollo API key in your account, then add it as the private Worker secret `APOLLO_API_KEY`; do not share the key or your password in chat.
 
-## Verification and limits
+Employer-form submission is not yet connected to the hosted workflow. A Lever browser adapter and an exact-approval execution ledger exist in the local source, but they are not wired into the production application workflow. Hosted Gmail synchronization and Google Sheet writes are also not connected. Do not treat a prepared draft, queued review, or tracker read as an application submission.
 
-174 local tests passed, including nine HTTP integration checks. Hosted access-control/storage tests passed. The latest private deployment succeeded. Browser review confirmed the overview loaded with 72 applications; the entire phone action journey is not yet fully verified.
+## Private access and local run
 
-Full PRD acceptance is pending: independent cloud execution, token lifecycle monitoring, continuous external tracker writes, remaining approved application/calendar adapters, notifications and outcome-learning verification. See HUNT-v2-status.md in the parent outputs folder for current acceptance status. Local records use restricted file permissions; the audit chain is verified but not externally anchored.
+Workspace API data is owner-only. The public page shell is not permission to read application packages or the CV. Keep exports and the local database private.
 
-Developer verification: HUNT_HTTP_TESTS=1 python3 -m unittest discover -p 'test*.py'. Runtime data stays in data/. Keep all exports private.
+Double-click `Start HUNT.command` to run the local dashboard at `http://127.0.0.1:8765/`. Keep its Terminal open.
+
+## Verification
+
+Run the local Python suite with:
+
+```sh
+HUNT_HTTP_TESTS=1 python3 -m unittest discover -p 'test*.py'
+```
+
+Hosted Worker tests live under `cloud/test_*.mjs` and use mocked providers; they do not prove live Apollo access, external tracker writes, LinkedIn/X coverage, or employer submissions.

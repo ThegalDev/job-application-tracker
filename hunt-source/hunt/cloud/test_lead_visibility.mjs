@@ -11,6 +11,6 @@ assert.equal(context.isFreshRemote(base),false,'Undated lead cannot enter confir
 for(const freshness of ['older_than_48_hours','future_timestamp'])assert.equal(context.needsVerification({...base,freshness}),false);
 assert.equal(context.needsVerification({...base,assessment:{...base.assessment,tier:'D'}}),false);
 assert.equal(context.needsVerification({...base,assessment:{...base.assessment,duplicate_applications:[{}]}}),false);
-assert.equal(context.needsVerification({...base,within_discovery_window:true,freshness:'within_48_hours'}),false);
+assert.equal(context.needsVerification({...base,within_discovery_window:true,freshness:'within_48_hours'}),true,'Recent source listing remains visible for original-date review');
 assert.equal(context.needsVerification({...base,global_remote:false,location:'Remote — Nigeria'}),true);
 console.log('8 lead visibility checks passed');

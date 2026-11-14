@@ -51,6 +51,26 @@ class FullCvPreservationAcceptance(unittest.TestCase):
             with self.subTest(marker=marker):
                 self.assertEqual(tailored[tailored.index('CORE COMPETENCIES'):].count(marker), suffix.count(marker))
 
+    def test_role_title_and_relevant_project_highlights_keep_the_full_cv(self):
+        source = (Path(__file__).parent / 'data/master-cv.txt').read_bytes().decode('utf-8')
+        highlights = drafting.select_project_evidence(source,
+            'Build recruitment operations workflows, hiring pipelines and HR automation.')
+        self.assertTrue(highlights)
+        self.assertLessEqual(len(highlights), 3)
+        self.assertTrue(any('Recruitment Operating System' in item['title'] for item in highlights))
+        for item in highlights:
+            self.assertIn(item['text'], source)
+        competencies_start = source.index('CORE COMPETENCIES')
+        tailored = drafting.preserve_resume(source, 'A verified, role-specific summary.',
+            'Talent Acquisition Partner', highlights)
+        self.assertTrue(tailored.lstrip('\ufeff').startswith('MAJEKADEGBE AMINAT BAMITALE'))
+        self.assertIn('Target role: Talent Acquisition Partner', tailored)
+        self.assertIn('SELECTED PROJECT HIGHLIGHTS', tailored)
+        self.assertEqual(tailored[tailored.index('CORE COMPETENCIES'):], source[competencies_start:])
+        self.assertIn('PROFESSIONAL EXPERIENCE', tailored)
+        self.assertIn('TRAININGS & CERTIFICATIONS', tailored)
+        self.assertIn('PROJECTS', tailored)
+
     def test_no_tailoring_returns_entire_source_unchanged(self):
         source = '\ufeffHEADER\r\nPROFESSIONAL SUMMARY  \r\nOriginal.\r\nCORE COMPETENCIES\r\nEvery detail.\r\n'
         self.assertEqual(drafting.preserve_resume(source), source)
@@ -66,11 +86,11 @@ class FullCvPreservationAcceptance(unittest.TestCase):
 
 
 class DraftPrivacyAndEvidenceAcceptance(unittest.TestCase):
-    def generate(self, result=None, facts=None, job=None):
+    def generate(self, result=None, facts=None, job=None, master_cv=None):
         with patch.object(hunt, 'load_key', return_value='fixture-key'), \
              patch.object(hunt, 'value_for', return_value='https://example.test/portfolio'), \
              patch.object(hunt, 'fetch_json', return_value=response(result or RESULT)) as fetch:
-            output = drafting.generate(hunt, job or JOB, facts or FACTS)
+            output = drafting.generate(hunt, job or JOB, facts or FACTS, master_cv)
             return output, fetch.call_args.args[1]
 
     def test_exactly_eight_approved_excerpts_sent_without_private_metadata(self):
@@ -85,6 +105,25 @@ class DraftPrivacyAndEvidenceAcceptance(unittest.TestCase):
         self.assertFalse(body['store'])
         self.assertNotIn('tools', body)
         self.assertEqual(body['text']['format']['schema']['properties']['fact_ids']['items']['enum'], list(IDS))
+
+    def test_role_relevant_projects_are_bounded_source_excerpts_and_written_as_bullets(self):
+        source = ('AMINAT MAJEKADEGBE\nOld HR headline\nPrivate contact details.\n'
+                  'PROFESSIONAL SUMMARY\nOriginal summary.\nCORE COMPETENCIES\nOriginal skills.\n'
+                  'PROJECTS\nRecruitment Operating System\n'
+                  '* Built a nine-stage recruitment workflow automation with human review.\n'
+                  'CERTIFICATIONS\nOriginal training stays intact.\n')
+        job = {**JOB, 'description': 'Build recruitment workflow automation for a hiring team.'}
+        (draft, _, _), body = self.generate(job=job, master_cv=source)
+        request = json.loads(body['input'])
+        project = request['approved_project_excerpts'][0]
+        self.assertEqual(project['title'], 'Recruitment Operating System')
+        self.assertIn(project['id'], body['text']['format']['schema']['properties']['fact_ids']['items']['enum'])
+        self.assertIn('- Recruitment Operating System: '+project['text'], draft['cover_letter'])
+        self.assertNotIn('Private contact details', body['input'])
+        tailored = drafting.preserve_resume(source, draft['cv_summary'], job['title'], [project])
+        self.assertIn('Target role: People Operations Specialist', tailored)
+        self.assertIn('SELECTED PROJECT HIGHLIGHTS', tailored)
+        self.assertTrue(tailored.endswith('CERTIFICATIONS\nOriginal training stays intact.\n'))
 
     def test_unapproved_only_fact_set_never_calls_provider(self):
         with patch.object(hunt, 'load_key') as key, patch.object(hunt, 'fetch_json') as fetch:

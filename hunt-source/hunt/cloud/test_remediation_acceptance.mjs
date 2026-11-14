@@ -92,22 +92,22 @@ test('hybrid and local onsite jobs cannot enter global fully remote presentation
  for(const j of state.jobs)assert.equal(j.global_remote,false,j.id);
 });
 
-const FULL_CV='\ufeffPRIVATE_CV_CONTACT_SENTINEL\r\nPROFESSIONAL SUMMARY  \r\nOriginal career summary.\r\nCORE COMPETENCIES\r\nAll original systems and skills.\r\nPROFESSIONAL EXPERIENCE\r\nFirst role 2024—2025; every original bullet.\r\nSecond role 2025—Present; detailed achievements.\r\nEDUCATION\r\nAll original qualifications.\r\nPROJECTS\r\nComplete project architectures and evidence.\r\nCERTIFICATIONS\r\nOriginal training details.\r\n';
+const FULL_CV='\ufeffAMINAT MAJEKADEGBE\r\nHR Professional | People Operations\r\nPRIVATE_CV_CONTACT_SENTINEL\r\nPROFESSIONAL SUMMARY  \r\nOriginal career summary.\r\nCORE COMPETENCIES\r\nAll original systems and skills.\r\nPROFESSIONAL EXPERIENCE\r\nFirst role 2024—2025; every original bullet.\r\nSecond role 2025—Present; detailed achievements.\r\nEDUCATION\r\nAll original qualifications.\r\nPROJECTS\r\nRecruitment Operating System\r\n* Built a nine-stage recruitment workflow automation with human review.\r\nCERTIFICATIONS\r\nOriginal training details.\r\n';
 const hashText=text=>createHash('sha256').update(text).digest('hex');
 async function storeCV(env,text=FULL_CV){const state=await request(env,'/api/state');return request(env,'/api/bridge/master-cv',{method:'POST',token:state.data.csrf,body:{text,source_url:'https://private-cv-source.test/original',sha256:hashText(text)}})}
 const draft={cover_letter:'Dear hiring team,\nYour people systems need dependable ownership. My verified lifecycle work is relevant.\nAminat',cold_email_subject:'The person behind the process',cold_email:'Your people systems need ownership that keeps the team moving. My lifecycle work is relevant. Please put this application before the person leading the search.\nAminat',cv_summary:'Verified People Operations and lifecycle experience.',fact_ids:['lifecycle']};
 function aiResponse(value=draft){return new Response(JSON.stringify({status:'completed',id:'fixture-model-response',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify(value)}]}]}),{headers:{'Content-Type':'application/json'}})}
 test('private hosted full CV remains exact in source mode and absent from generic state',async()=>{
  const env=await environment([posting()]);const saved=await storeCV(env);assert.equal(saved.response.status,200);assert.equal(saved.data.model_input,false);assert.equal(saved.data.snapshot_visible,false);
- const result=await app.hostedPackage(env,'fixture:one',false);assert.equal(result.resume_full,FULL_CV);assert.equal(result.full_cv_preserved,true);assert.equal(result.full_cv_source_hash,hashText(FULL_CV));
+ const result=await app.hostedPackage(env,'fixture:one',false),projects=app.selectProjectEvidence(FULL_CV,posting().description);assert.equal(result.resume_full,app.preserveFullCV(FULL_CV,null,posting().title,projects));assert.equal(result.full_cv_preserved,true);assert.equal(result.full_cv_source_hash,hashText(FULL_CV));assert.match(result.resume_full,/Target role: People Operations Specialist/);assert.match(result.resume_full,/SELECTED PROJECT HIGHLIGHTS/);assert.match(result.resume_full,/CERTIFICATIONS\r\nOriginal training details/);
  const state=await request(env,'/api/state');assert.ok(!JSON.stringify(state.data).includes('PRIVATE_CV_CONTACT_SENTINEL'));assert.equal(state.data.packages[0].resume_full,undefined);
 });
 test('hosted AI changes only fullCV summary and transmits exactly eight approved excerpts',async()=>{
  const env={...await environment([posting()]),OPENAI_API_KEY:'fixture-not-a-real-key'};await storeCV(env);const captured=[];const originalFetch=globalThis.fetch;
  globalThis.fetch=async(url,options)=>{assert.equal(String(url),'https://api.openai.com/v1/responses');captured.push(JSON.parse(options.body));return aiResponse()};
- try{const result=await app.hostedPackage(env,'fixture:one',true);const end=FULL_CV.indexOf('\n',FULL_CV.indexOf('PROFESSIONAL SUMMARY'))+1;const suffix=FULL_CV.slice(FULL_CV.indexOf('CORE COMPETENCIES'));assert.equal(result.resume_full,FULL_CV.slice(0,end)+draft.cv_summary+'\n\n'+suffix);assert.equal(result.full_cv_preserved,true);assert.equal(result.writing_profile_version,WRITING_PROFILE.version);}
+ try{const result=await app.hostedPackage(env,'fixture:one',true);assert.equal(result.resume_full,app.preserveFullCV(FULL_CV,draft.cv_summary,posting().title,app.selectProjectEvidence(FULL_CV,posting().description)));assert.equal(result.full_cv_preserved,true);assert.equal(result.writing_profile_version,WRITING_PROFILE.version);}
  finally{globalThis.fetch=originalFetch}
- assert.equal(captured.length,1);const body=captured[0],input=JSON.parse(body.input);assert.equal(body.store,false);assert.equal(body.tools,undefined);assert.deepEqual(input.approved_facts,facts.map(({id,text})=>({id,text})));assert.equal(input.approved_facts.length,8);for(const sentinel of ['PRIVATE_CV_CONTACT_SENTINEL','private-cv-source.test','PRIVATE_METADATA_SENTINEL','private-source.test'])assert.ok(!body.input.includes(sentinel),sentinel);
+ assert.equal(captured.length,1);const body=captured[0],input=JSON.parse(body.input);assert.equal(body.store,false);assert.equal(body.tools,undefined);assert.deepEqual(input.approved_facts,facts.map(({id,text})=>({id,text})));assert.equal(input.approved_facts.length,8);assert.ok(input.approved_project_excerpts.some(p=>p.title==='Recruitment Operating System'));for(const sentinel of ['PRIVATE_CV_CONTACT_SENTINEL','private-cv-source.test','PRIVATE_METADATA_SENTINEL','private-source.test'])assert.ok(!body.input.includes(sentinel),sentinel);
 });
 test('private CV hash mismatch cannot be stored as trusted source',async()=>{
  const env=await environment();const state=await request(env,'/api/state');const saved=await request(env,'/api/bridge/master-cv',{method:'POST',token:state.data.csrf,body:{text:FULL_CV,source_url:'https://private-cv-source.test/original',sha256:'0'.repeat(64)}});assert.equal(saved.response.status,400);assert.equal((await request(env,'/api/state')).data.cloud_runtime.full_cv_stored,false);
@@ -115,7 +115,7 @@ test('private CV hash mismatch cannot be stored as trusted source',async()=>{
 test('a changed master CV invalidates cached source packages instead of returning old chronology',async()=>{
  const env=await environment([posting()]);await storeCV(env);const first=await app.hostedPackage(env,'fixture:one',false);
  const updated=FULL_CV+'\r\nNEWLY_VERIFIED_PROJECT_SENTINEL\r\nComplete new project evidence.\r\n';await storeCV(env,updated);const second=await app.hostedPackage(env,'fixture:one',false);
- assert.equal(second.resume_full,updated);assert.notEqual(second.full_cv_source_hash,first.full_cv_source_hash);assert.notEqual(second.payload_hash,first.payload_hash);
+ assert.equal(second.resume_full,app.preserveFullCV(updated,null,posting().title,app.selectProjectEvidence(updated,posting().description)));assert.notEqual(second.full_cv_source_hash,first.full_cv_source_hash);assert.notEqual(second.payload_hash,first.payload_hash);
 });
 test('hosted employer metric cannot become a candidate achievement with an unrelated fact citation',async()=>{
  const env={...await environment([posting({description:'Own onboarding. Employer target is to reduce turnover by 42%. USD 3000 per month.'})]),OPENAI_API_KEY:'fixture-not-a-real-key'};const originalFetch=globalThis.fetch;
@@ -132,6 +132,14 @@ test('default hosted opportunities excludes old local uncertain-pay and uncertai
  assert.deepEqual(Array.from(context.fixtureActive({hosted:true,jobs})),['qualified']);
  assert.deepEqual(Array.from(context.fixtureActive({hosted:true,jobs:jobs.filter(j=>j.id!=='qualified')})),[],'No confirmed match must display zero, without filling with old or uncertain jobs');
 });
+test('recent remote view shows all fresh leads without eligibility or salary gating',async()=>{
+ const source=await readFile(new URL('../web/app.js',import.meta.url),'utf8'),context=vm.createContext({});
+ vm.runInContext(source.slice(0,source.indexOf("$('#close').onclick"))+'\nglobalThis.fixtureRecent=(v)=>{state=v;filter="recent";return opportunities()};',context);
+ const make=(id,tier='A',changes={})=>({...posting({id}),open:1,remote:true,within_discovery_window:true,global_remote:true,assessment:{tier,status:tier==='D'?'Excluded':'Research needed',score:75,duplicate_applications:[],compensation:{status:'unknown'},reasons:['Eligibility or pay remains unverified.']},...changes});
+ const jobs=[make('fresh-excluded','D'),make('fresh-unknown','C'),make('fresh-eligible','A'),make('old','A',{within_discovery_window:false}),make('not-remote','A',{remote:false,global_remote:false})];
+ const html=context.fixtureRecent({hosted:true,jobs}),ids=[...html.matchAll(/data-job="([^"]+)"/g)].map(m=>m[1]);
+ assert.deepEqual(ids,['fresh-excluded','fresh-unknown','fresh-eligible']);assert.match(html,/Recent remote posts/);assert.match(html,/Excluded/);
+});
 test('hosted Download package retrieves complete preserved CV rather than generic-state metadata',async()=>{
  const source=await readFile(new URL('../web/app.js',import.meta.url),'utf8');const button={dataset:{download:'fixture-package'}};
  const context=vm.createContext({button,document:{querySelectorAll:selector=>selector==='[data-download]'?[button]:[],querySelector:()=>null}});
@@ -147,8 +155,8 @@ test('a queued preparation response never opens a nonexistent finished package',
 test('hosted source preparation button endpoint completes on cloud storage without desktop queue',async()=>{
  const env=await environment([posting()]);await storeCV(env);const state=await request(env,'/api/state');
  const prepared=await request(env,'/api/package',{method:'POST',token:state.data.csrf,body:{job_id:'fixture:one',use_ai:false}});
- assert.equal(prepared.response.status,200);assert.equal(prepared.data.queued,undefined);assert.equal(prepared.data.resume_full,FULL_CV);
- const reopened=await request(env,'/api/package?id='+prepared.data.id);assert.equal(reopened.response.status,200);assert.equal(reopened.data.resume_full,FULL_CV);
+ assert.equal(prepared.response.status,200);assert.equal(prepared.data.queued,undefined);assert.equal(prepared.data.resume_full,app.preserveFullCV(FULL_CV,null,posting().title,app.selectProjectEvidence(FULL_CV,posting().description)));
+ const reopened=await request(env,'/api/package?id='+prepared.data.id);assert.equal(reopened.response.status,200);assert.equal(reopened.data.resume_full,prepared.data.resume_full);
  assert.equal((await request(env,'/api/state')).data.bridge.pending_commands,0);
 });
 test('research queue retains uncertain matches separately and suppresses duplicate listings',async()=>{
@@ -198,7 +206,7 @@ test('private Day1 failure recovers to internal review without provider calls or
  const failure={id:'fe12a005-807b-4cb2-b02e-0e3c8d0a20b8',job_id:'fixture:one',job_version:'fixture-version',writing_profile_version:WRITING_PROFILE.version,status:'requires_revision',error_code:'unsupported_numerical_tokens',unsupported_tokens:['1'],fact_ids:['lifecycle'],drafts:{...draft,cover_letter:'Your Day 1 readiness depends on reliable coordination.\n\nMy verified lifecycle work is relevant.'}};
  const counterKey='hunt/runtime/ai-attempts/'+new Date().toISOString().slice(0,10)+'.json';const counter={count:5,last_attempt:'fixture-existing-paid-attempt'};await env.BUCKET.put(counterKey,JSON.stringify(counter));
  await env.BUCKET.put('hunt/private/failed-drafts.json',JSON.stringify([failure]));const originalFetch=globalThis.fetch;let providerCalls=0;globalThis.fetch=async()=>{providerCalls++;throw new Error('Recovery must not call any provider')};
- try{const result=await app.recoverDraft(env,failure.id);assert.equal(result.status,'review');assert.match(result.cover_letter,/first day/i);assert.doesNotMatch(result.cover_letter,/\b1\b/);assert.deepEqual(result.claim_fact_ids,['lifecycle']);assert.equal(result.resume_full,FULL_CV.slice(0,FULL_CV.indexOf('\n',FULL_CV.indexOf('PROFESSIONAL SUMMARY'))+1)+draft.cv_summary+'\n\n'+FULL_CV.slice(FULL_CV.indexOf('CORE COMPETENCIES')));assert.equal(result.recovery.model_calls,0);const repeat=await app.recoverDraft(env,failure.id);assert.equal(repeat.id,result.id);assert.equal(providerCalls,0);assert.deepEqual(await (await env.BUCKET.get(counterKey)).json(),counter);const state=(await request(env,'/api/state')).data;assert.equal(state.bridge.pending_commands,0);assert.equal(state.packages.length,1);}
+ try{const result=await app.recoverDraft(env,failure.id);assert.equal(result.status,'review');assert.match(result.cover_letter,/first day/i);assert.doesNotMatch(result.cover_letter,/\b1\b/);assert.deepEqual(result.claim_fact_ids,['lifecycle']);assert.equal(result.resume_full,app.preserveFullCV(FULL_CV,draft.cv_summary,posting().title,app.selectProjectEvidence(FULL_CV,posting().description)));assert.equal(result.recovery.model_calls,0);const repeat=await app.recoverDraft(env,failure.id);assert.equal(repeat.id,result.id);assert.equal(providerCalls,0);assert.deepEqual(await (await env.BUCKET.get(counterKey)).json(),counter);const state=(await request(env,'/api/state')).data;assert.equal(state.bridge.pending_commands,0);assert.equal(state.packages.length,1);}
  finally{globalThis.fetch=originalFetch}
 });
 test('recovery rejects a changed job version without calling the model',async()=>{

@@ -1,5 +1,5 @@
 {
-  "version": "aminat-2026-11-12-r2",
+  "version": "aminat-2026-11-13-r3",
   "provenance": [
     {
       "thread": "6aea4121-1e18-83ea-88cd-f40ed8600515",
@@ -21,9 +21,9 @@
     }
   ],
   "cover_letter": {
-    "opening": "Start with a specific verified employer problem, work or role need. Write a natural story connecting it to relevant documented candidate work.",
+    "opening": "Start with a specific verified employer problem or role need, then tell one short story connecting it to documented candidate work. Keep it warm, observant and lightly witty where natural.",
     "voice": "Warm, human, clear, observant and specific; restrained wit where natural. Avoid corporate filler and exaggerated praise.",
-    "structure": "Use short paragraphs: an exact employer/role need first, one documented piece of candidate work as a small practical story (problem, actual work, relevance), an honest bridge to the role and a direct application-focused close. Do not narrate an invented incident or dump every achievement. Return body only; the app adds greeting, real portfolio link and signature locally.",
+    "structure": "Use short paragraphs: an exact employer/role need first, one documented piece of candidate work as a small practical story (problem, actual work, relevance), an honest bridge to the role and a direct application-focused close. Do not narrate an invented incident or dump every achievement. The app appends up to three role-matched, source-verbatim project bullets after the story. Return body only; the app adds greeting, project bullets, real portfolio link and signature locally.",
     "avoid": [
       "I hope this email finds you well",
       "I am excited to apply",
@@ -53,6 +53,8 @@
     "preserve_all_content": true,
     "allowed_changes": [
       "Replace professional summary using verified evidence",
+      "Replace the professional headline with the exact target role title",
+      "Add a short role-relevant project highlight section near the top using verbatim source bullets",
       "Emphasize relevant existing bullets without deleting or fabricating them"
     ],
     "disallowed_changes": [
@@ -62,7 +64,7 @@
     ]
   },
   "evidence_rules": [
-    "Only the eight API-approved fact IDs may be sent to the model.",
+    "Only the eight API-approved fact IDs and up to three exact project excerpts selected from the private master CV may be sent to the model; the complete CV is never model input.",
     "Use only public job information for employer-specific claims.",
     "No email content, contact details, full CV, private anecdotes or reference URLs in model input.",
     "Every candidate claim requires existing fact IDs. Drafts require owner review.",

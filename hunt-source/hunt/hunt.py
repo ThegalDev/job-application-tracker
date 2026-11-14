@@ -303,11 +303,14 @@ def package(job_id,use_ai=True):
         count=c.execute("SELECT COUNT(*) FROM events WHERE kind='ai_attempt' AND at>=?",(now()[:10],)).fetchone()[0]
         if use_ai and count>=5: raise ValueError('Daily AI call ceiling reached (5). Try another day.')
         if use_ai: audit(c,'ai_attempt',{'job_id':job_id,'model':os.environ.get('HUNT_MODEL','gpt-4.1-mini'),'max_output_tokens':3000})
+    import drafting
+    source_cv_path=DATA/'master-cv.txt'
+    source_cv=source_cv_path.read_bytes().decode('utf-8') if source_cv_path.is_file() else ''
+    project_highlights=drafting.select_project_evidence(source_cv,j['description']) if source_cv else []
     usage={};request_id=None;drafts=None
     if use_ai:
         try:
-            import drafting
-            drafts,usage,request_id=drafting.generate(__import__(__name__),j,facts)
+            drafts,usage,request_id=drafting.generate(__import__(__name__),j,facts,source_cv)
             selection={'fact_ids':drafts['fact_ids'],'requirement_quote':'','questions':['Which evidence best addresses the advertised need?','What experience gaps should be discussed honestly?','What would your first operational priority be?']}
         except Exception as e:
             with db() as c:audit(c,'ai_failed',{'job_id':job_id,'error_type':type(e).__name__,'detail':str(e)[:120]})
@@ -317,12 +320,11 @@ def package(job_id,use_ai=True):
     if not chosen: chosen=facts[:3]
     cv='AMINAT MAJEKADEGBE\nPeople Operations | HR Systems | Recruitment Operations\nLagos, Nigeria\nmajekadegbeaminat85@gmail.com\n\nSELECTED VERIFIED EXPERIENCE\n\n'+'\n\n'.join('• '+f['text'] for f in chosen)
     cv+='\n\nFull employment chronology and qualifications: '+value_for('cv_url')+'\nPortfolio: '+value_for('portfolio')
-    source_cv=DATA/'master-cv.txt'
-    full_resume=build_resume(source_cv.read_text(),chosen,drafts.get('cv_summary') if drafts else None) if source_cv.is_file() else cv
+    full_resume=build_resume(source_cv,chosen,drafts.get('cv_summary') if drafts else None,j['title'],project_highlights) if source_cv else cv
     cover=drafts['cover_letter'] if drafts else 'SOURCE EVIDENCE OUTLINE — not a finished cover letter.\n\n'+'\n\n'.join(f['text'] for f in chosen)
     cold=drafts['cold_email'] if drafts else 'SOURCE EVIDENCE OUTLINE — not a finished cold email.\n\n'+'\n\n'.join(f['text'] for f in chosen)
     payload={'job_id':job_id,'job_version':j['raw_hash'],'company':j['company'],'role':j['title'],'application_url':j['url'],'eligibility':a,
-             'selection':selection,'facts':chosen,'resume_excerpt':cv,'resume_full':full_resume,'cover_letter':cover,
+             'selection':{**selection,'project_ids':[p['id'] for p in project_highlights]},'facts':chosen,'project_highlights':project_highlights,'resume_excerpt':cv,'resume_full':full_resume,'cover_letter':cover,
              'answers':{'Relevant experience':'\n'.join(f['text'] for f in chosen),'Portfolio':value_for('portfolio'),'Compensation expectation':'Target: USD 2,500/month; employment terms and currency require review.'},
              'outreach':{'recipient':None,'subject':drafts['cold_email_subject'] if drafts else j['title']+' — Aminat Majekadegbe','body':cold,'status':'Draft only; recipient unverified'},
              'interview_questions':selection['questions'],'company_dossier':dossier(j),
@@ -343,9 +345,9 @@ def package(job_id,use_ai=True):
 def value_for(k):
     with db() as c:return value(c,k)
 
-def build_resume(source,chosen,summary=None):
+def build_resume(source,chosen,summary=None,target_title=None,project_highlights=None):
     import drafting
-    return drafting.preserve_resume(source,summary)
+    return drafting.preserve_resume(source,summary,target_title,project_highlights)
 
 def dossier(j):
     lines=[s.strip() for s in re.split(r'\n+',j['description']) if len(s.strip())>50]

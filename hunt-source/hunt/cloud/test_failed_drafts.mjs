@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {webcrypto} from 'node:crypto';
+import {webcrypto,createHash} from 'node:crypto';
 import worker,{hostedPackage} from './dist/server/index.js';
 globalThis.crypto??=webcrypto;
 class MemoryR2{data=new Map();async get(k){const v=this.data.get(k);return v===undefined?null:{etag:'v',json:async()=>JSON.parse(v)}}async put(k,v,opts={}){if(opts.onlyIf?.etagDoesNotMatch==='*'&&this.data.has(k))return null;this.data.set(k,v);return {key:k}}async list({prefix}){return {objects:[...this.data.keys()].filter(k=>k.startsWith(prefix)).map(key=>({key}))}}async delete(k){this.data.delete(k)}}
@@ -9,7 +9,7 @@ test('numeric failures preserve bounded private drafts while diagnostics expose 
  const job={id:'test-job',company:'Example',title:'People Operations',location:'Remote worldwide',description:'Coordinate onboarding and workflow processes.',url:'https://jobs.ashbyhq.com/example/test-job',open:1,raw_hash:'v',assessment:{tier:'A',duplicate_applications:[],matches:[]}};
  const snapshot={at:new Date().toISOString(),paused:false,jobs:[job],applications:[],facts:[{id:'onboarding',text:'Coordinated onboarding for more than 300 employees.',source:'https://private-source.test/cv'}],packages:[],sources:[],events:[],resources:{}};
  await bucket.put('hunt/snapshot.json',JSON.stringify({snapshot}));
- await bucket.put('hunt/private/master-cv.json',JSON.stringify({text:'PRIVATE_FULL_CV_SENTINEL',sha256:'unused-during-failed-validation'}));
+ await bucket.put('hunt/private/master-cv.json',JSON.stringify({text:'PRIVATE_FULL_CV_SENTINEL',sha256:createHash('sha256').update('PRIVATE_FULL_CV_SENTINEL').digest('hex')}));
  await bucket.put('hunt/private/failed-drafts.json',JSON.stringify(Array.from({length:5},(_,i)=>({id:'old-'+i,status:'requires_revision',drafts:{cover_letter:'old private draft'}}))));
  const generated={cover_letter:'Day 1 needs consistency. I coordinated onboarding for 301 employees.',cold_email_subject:'Keep the first day moving',cold_email:'Your onboarding needs dependable coordination.',cv_summary:'People Operations experience.',fact_ids:['onboarding']};
  const originalFetch=globalThis.fetch;let calls=0;
