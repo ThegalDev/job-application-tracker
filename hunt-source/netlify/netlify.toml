@@ -1,4 +1,6 @@
 [build]
+  # build.mjs imports ../hunt; changes there must also trigger this site build.
+  ignore = "exit 1"
   command = "npm run build"
   publish = "public"
   functions = "netlify/functions"
