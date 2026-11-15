@@ -19,7 +19,10 @@ server_source=(ROOT/'server.mjs').read_text().replace("import {trackerStatus,con
 cv_source=(ROOT/'cv-document.mjs').read_text().replace('export ','')
 cv_prelude='const {cvArtifact}=(()=>{'+cv_source+';return {cvArtifact};})();\n'
 server_source=server_source.replace("import {cvArtifact} from './cv-document.mjs';\n",'')
-source=cv_prelude+application_prelude+visibility_prelude+notification_prelude+'const DRAFTING_INSTRUCTIONS='+json.dumps(instructions,ensure_ascii=False)+';\n'+'const WRITING_PROFILE='+json.dumps(profile,ensure_ascii=False)+';\n'+'const ASSETS='+json.dumps(assets,ensure_ascii=False)+';\n'+server_source
+native_source=(ROOT/'native-cv.mjs').read_text().replace('export ','')
+native_prelude='const {createNativeCVTask,nativeCVTask,executeNativeCVDraft}=(()=>{'+native_source+';return {createNativeCVTask,nativeCVTask,executeNativeCVDraft};})();\n'
+server_source=server_source.replace("import {createNativeCVTask,nativeCVTask,executeNativeCVDraft} from './native-cv.mjs';\n",'')
+source=native_prelude+'const CV_TAILORING_INSTRUCTIONS='+json.dumps((ROOT.parent/'cv-tailoring-instructions.md').read_text())+';\n'+cv_prelude+application_prelude+visibility_prelude+notification_prelude+'const DRAFTING_INSTRUCTIONS='+json.dumps(instructions,ensure_ascii=False)+';\n'+'const WRITING_PROFILE='+json.dumps(profile,ensure_ascii=False)+';\n'+'const ASSETS='+json.dumps(assets,ensure_ascii=False)+';\n'+server_source
 out=ROOT/'dist/server/index.js';out.parent.mkdir(parents=True,exist_ok=True);out.write_text(source)
 manifest=ROOT/'.openai/hosting.json'
 config=json.loads(manifest.read_text());config['r2']='BUCKET';config['d1']=None;config.pop('static',None)

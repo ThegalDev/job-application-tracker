@@ -51,7 +51,7 @@ class HUNTConnection:
         self.root=Path(root)
 
     def request(self,path,binary=False,body=None):
-        if not path.startswith(('/api/application-context?','/api/cv-artifact?','/api/application-candidates','/api/application-runner-status','/api/package','/api/application-receipt')):raise ValueError('Runner read path denied')
+        if not path.startswith(('/api/application-context?','/api/cv-artifact?','/api/application-candidates','/api/application-runner-status','/api/package','/api/application-receipt','/api/native-cv-draft','/api/native-cv-attach')):raise ValueError('Runner read path denied')
         headers={'X-HUNT-Owner-Key':self.owner_key,'Cache-Control':'no-cache'}
         if body is not None:
             token=secrets.token_hex(32);headers.update({'Origin':BASE,'Cookie':'__Host-hunt_csrf='+token,'X-CSRF-Token':token,'Content-Type':'application/json'})
@@ -68,9 +68,10 @@ class HUNTConnection:
         meta=context['cv_artifact'];p=context['package']
         if meta['package_id']!=p['id'] or meta['package_hash']!=p['payload_hash'] or not re.fullmatch('[a-f0-9]{64}',meta['sha256']):raise ValueError('Reviewed document identity mismatch')
         data=self.request('/api/cv-artifact?'+urlencode({'id':p['id'],'hash':p['payload_hash']}),binary=True)
-        if hashlib.sha256(data).hexdigest()!=meta['sha256'] or not data.startswith(b'PK'):raise ValueError('Reviewed CV integrity check failed')
+        is_pdf=meta.get('media_type')=='application/pdf'
+        if hashlib.sha256(data).hexdigest()!=meta['sha256'] or not data.startswith(b'%PDF-' if is_pdf else b'PK'):raise ValueError('Reviewed CV integrity check failed')
         directory=self.root/'data/application-files';directory.mkdir(parents=True,exist_ok=True,mode=0o700);directory.chmod(0o700)
-        target=directory/(meta['sha256']+'.docx')
+        target=directory/(meta['sha256']+('.pdf' if is_pdf else '.docx'))
         if target.exists():
             if hashlib.sha256(target.read_bytes()).hexdigest()!=meta['sha256']:raise ValueError('Local reviewed document changed')
         else:

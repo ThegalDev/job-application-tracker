@@ -1,3 +1,4 @@
+import {createNativeCVTask,nativeCVTask,executeNativeCVDraft} from './native-cv.mjs';
 import {cvArtifact} from './cv-document.mjs';
 import {trackerStatus,connectTracker,manualApplications,recordApplied,syncTracker,recordConfirmedApplication} from './applications.mjs';
 import {visibilitySettings,jobVisibility,updateVisibility} from './visibility.mjs';
@@ -214,6 +215,13 @@ export async function normalizeBroadFeed(f,data,at=new Date().toISOString()){
   for(const j of rows)j.raw_hash=await digest({title:j.title,location:j.location,url:j.url,description:j.description});return rows;
 }
 
+async function packageArtifact(bucket,p){
+ if(!p.native_cv)return cvArtifact(p);
+ const stored=await read(bucket,'hunt/private/native-cv-pdfs/'+p.native_cv.sha256+'.json');if(!stored)throw Error('Native PDF not found');
+ const bytes=Uint8Array.from(atob(stored.pdf_base64),c=>c.charCodeAt(0)),sha256=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),x=>x.toString(16).padStart(2,'0')).join('');
+ if(sha256!==p.native_cv.sha256)throw Error('Native PDF integrity check failed');
+ return {bytes,sha256,filename:'Aminat-'+String(p.company||'Application').replace(/[^A-Za-z0-9-]/g,'-')+'-CV.pdf',media_type:'application/pdf',document_version:p.native_cv.document_revision,package_id:p.id,package_hash:p.payload_hash};
+}
 async function textDigest(value){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value))),x=>x.toString(16).padStart(2,'0')).join('')}
 export function preserveFullCV(source,summary,targetTitle=null,projects=[]){const newline=source.includes('\r\n')?'\r\n':'\n';if(targetTitle){const pattern=/^([^\r\n]*\r?\n)[^\r\n]*(\r?\n)/m;if(!pattern.test(source))throw new Error('Master CV name/title boundary could not be verified; full CV was not altered');source=source.replace(pattern,(_,name,ending)=>name+'Target role: '+targetTitle.trim()+ending)}if(summary){const pattern=/(PROFESSIONAL SUMMARY[^\n]*\n)([\s\S]*?)(?=CORE COMPETENCIES)/;if(!pattern.test(source))throw new Error('Master CV summary boundary could not be verified; full CV was not altered');source=source.replace(pattern,(_,heading)=>heading+summary.trim()+'\n\n')}if(projects.length){const marker=/^CORE COMPETENCIES/m.exec(source);if(!marker)throw new Error('Master CV competency boundary could not be verified; full CV was not altered');const section='SELECTED PROJECT HIGHLIGHTS'+newline+projects.map(p=>'- '+p.title+': '+p.text).join(newline)+newline+newline;source=source.slice(0,marker.index)+section+source.slice(marker.index)}return source}
 export async function digest(value){const data=new TextEncoder().encode(JSON.stringify(value));return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',data)),x=>x.toString(16).padStart(2,'0')).join('')}
@@ -462,6 +470,7 @@ export async function handle(req,env){
       const token=/^[a-f0-9]{64}$/.test(cookie(req))?cookie(req):random();
       const state=await browserState(bucket,token);state.notifications=await notificationStatus(bucket,state.cloud_runs?.[0]?.id);state.tracker=await trackerStatus(bucket);state.desktop_runner=await read(bucket,'hunt/runtime/desktop-runner.json',{status:'not_connected'});state.cloud_runtime.ai_preparation=env.OPENAI_API_KEY?'configured':'not_configured';state.schedule=discoverySchedule();state.latest_failed_drafts=(await read(bucket,FAILED_DRAFTS,[])).map(failureMetadata);state.cloud_runtime.full_cv_stored=!!await read(bucket,MASTER_CV);state.capabilities={...state.capabilities,discovery:'Public ATS feeds, a16z portfolio, Startup Jobs RSS, Remotive, Jobicy, RemoteOK and WWR; source-post and employer-original dates are separate. LinkedIn/X and VC Bucket are not integrated.',ai:env.OPENAI_API_KEY?'Hosted approved-fact drafting configured':'Hosted AI connection not configured',apollo:env.APOLLO_API_KEY?'Owner-triggered, zero-credit Apollo people search configured; email reveal is separate':'Apollo API key not configured',gmail:'Hosted Gmail is not configured; saved recruiting evidence only',outbound:'No hosted send or application submission capability'};return reply(state,200,{'Set-Cookie':COOKIE+'='+token+'; Secure; HttpOnly; SameSite=Strict; Path=/'});
     }
+    if(path==='/api/native-cv-draft'&&req.method==='GET'){const task=await nativeCVTask(bucket,url.searchParams.get('id'));return task?reply(task):reply({error:'CV task not found'},404);}
     if(path==='/api/application-candidates'&&req.method==='GET'){
       const snapshot=await mergedSnapshot(bucket),control=await read(bucket,CONTROL,{}),paused=control.paused??snapshot.paused??true;
       const candidates=snapshot.jobs.filter(j=>!j.hidden&&j.open&&j.within_discovery_window&&j.publication_verified_original&&j.global_remote&&['A','B'].includes(j.assessment?.tier)&&j.assessment.score>=85&&j.assessment.compensation?.status==='meets_floor'&&j.assessment.compensation.monthly_min>=2500&&!j.assessment.duplicate_applications?.length&&!j.assessment.duplicate_listing_of);
@@ -472,13 +481,13 @@ export async function handle(req,env){
     if(path==='/api/application-context'&&req.method==='GET'){
       const jobId=url.searchParams.get('job_id'),packageId=url.searchParams.get('package_id');if(!jobId||!packageId||jobId.length>250||packageId.length>100)throw Error('Exact job and package identity required');
       const snapshot=await mergedSnapshot(bucket),job=snapshot.jobs.find(j=>j.id===jobId),p=snapshot.packages.find(p=>p.id===packageId);if(!job||!p||p.job_id!==job.id)return reply({error:'Job and package do not match'},404);
-      const artifact=await cvArtifact(p),{bytes,...metadata}=artifact;const master=await read(bucket,MASTER_CV);
+      const artifact=await packageArtifact(bucket,p),{bytes,...metadata}=artifact;const master=await read(bucket,MASTER_CV);
       return reply({paused:(await read(bucket,CONTROL,{})).paused??snapshot.paused??true,job:{id:job.id,company:job.company,title:job.title,raw_hash:job.raw_hash,open:job.open,hidden:job.hidden,assessment:job.assessment,verified:job.verified,within_discovery_window:job.within_discovery_window,publication_verified_original:job.publication_verified_original,global_remote:job.global_remote,application_url:job.original_application_url||job.url},package:{id:p.id,payload_hash:p.payload_hash,job_version:p.job_version,status:p.status,writing_profile_current:!p.writing_profile_version||p.writing_profile_version===WRITING_PROFILE.version,master_cv_source_hash:p.full_cv_source_hash,master_cv_current:!!master&&p.full_cv_source_hash===master.sha256},cv_artifact:metadata});
     }
     if(path==='/api/cv-artifact'&&req.method==='GET'){
       const id=url.searchParams.get('id'),hash=url.searchParams.get('hash');if(!id||id.length>100||!hash||hash.length>128)throw Error('Exact package identity and version are required');
       const [saved,packages]=await Promise.all([read(bucket,SNAPSHOT),read(bucket,CLOUD_PACKAGES,[])]);const p=[...packages,...(saved?.snapshot?.packages||[])].find(p=>p.id===id);if(!p)return reply({error:'Package not found'},404);if(p.payload_hash!==hash)return reply({error:'Package version changed; reopen its review'},409);
-      const artifact=await cvArtifact(p);if(url.searchParams.get('metadata')==='1'){const {bytes,...metadata}=artifact;return reply(metadata);}
+      const artifact=await packageArtifact(bucket,p);if(url.searchParams.get('metadata')==='1'){const {bytes,...metadata}=artifact;return reply(metadata);}
       return new Response(artifact.bytes,{headers:{...SECURITY,'Content-Type':artifact.media_type,'Content-Disposition':'attachment; filename="'+artifact.filename+'"','X-HUNT-Artifact-SHA256':artifact.sha256,'X-HUNT-Package-Hash':artifact.package_hash}});
     }
     if(path==='/api/tracker'&&req.method==='GET')return reply(await trackerStatus(bucket));
@@ -491,8 +500,26 @@ export async function handle(req,env){
     if(req.method!=='POST')return reply({error:'Not found'},404);
     if(!csrf(req))return reply({error:'Origin or CSRF denied',code:'CSRF_TOKEN_MISMATCH'},403);
     const body=await jsonBody(req);let type,payload;
+    if(path==='/api/native-cv-draft'){
+      const snapshot=await mergedSnapshot(bucket),job=snapshot.jobs.find(j=>j.id===body.job_id);if(!job||!job.open||job.hidden)throw Error('Select a current visible job');if(typeof env.dispatchNativeCV!=='function')throw Error('Native CV background service is not connected');
+      const task=await createNativeCVTask(bucket,body,job);if(task.status==='queued')await env.dispatchNativeCV(task.id);return reply(task,202);
+    }
+    if(path==='/api/native-cv-attach'){
+      const snapshot=await mergedSnapshot(bucket),base=snapshot.packages.find(p=>p.id===body.package_id),job=snapshot.jobs.find(j=>j.id===base?.job_id),n=body.native_cv;
+      if(!base||base.payload_hash!==body.expected_payload_hash||!job?.open||job.hidden||base.job_version!==job.raw_hash||base.status==='superseded')throw Error('Current visible package version required');
+      if(!n||n.source_doc_id!=='1u9NQcSpOF1jRwHUmN-LeKZTWazENUoQjvYV8xzkLsGQ'||!n.master_unchanged||n.qa?.paragraphs!==177||n.qa?.bullets!==90||n.qa?.drawings!==7||n.qa?.links?.length!==12||n.paragraphs_reviewed!==98||!/^[-_A-Za-z0-9]{20,100}$/.test(n.document_id||'')||n.document_id===n.source_doc_id||typeof n.document_revision!=='string'||typeof body.master_text!=='string'||body.master_text.length<1000)throw Error('Verified complete native CV provenance required');
+      if(typeof body.pdf_base64!=='string'||body.pdf_base64.length>3000000||!/^[A-Za-z0-9+/]*={0,2}$/.test(body.pdf_base64))throw Error('Bounded PDF export required');
+      const bytes=Uint8Array.from(atob(body.pdf_base64),c=>c.charCodeAt(0)),sha256=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),x=>x.toString(16).padStart(2,'0')).join('');
+      if(new TextDecoder().decode(bytes.slice(0,5))!=='%PDF-'||sha256!==n.sha256||bytes.length!==n.bytes)throw Error('Native PDF checksum mismatch');
+      const sourceHash=await textDigest(body.master_text);await write(bucket,MASTER_CV,{text:body.master_text,sha256:sourceHash,source_url:'https://docs.google.com/document/d/'+n.source_doc_id+'/edit',stored_at:new Date().toISOString()});
+      await write(bucket,'hunt/private/native-cv-pdfs/'+sha256+'.json',{pdf_base64:body.pdf_base64,sha256});
+      const {id:oldId,payload_hash:oldHash,at:oldAt,status:oldStatus,...prior}=base,payload={...prior,native_cv:n,full_cv_source_hash:sourceHash,full_cv_preserved:true,writing_profile_version:WRITING_PROFILE.version};
+      const payload_hash=await digest(payload),id='native-'+payload_hash.slice(0,32),result={...payload,id,payload_hash,status:'review',at:new Date().toISOString(),parent_package_id:base.id};
+      const saved=await read(bucket,CLOUD_PACKAGES,[]);if(saved.some(p=>p.id===id))return reply(saved.find(p=>p.id===id));
+      await write(bucket,CLOUD_PACKAGES,[result,...saved.map(p=>p.id===base.id?{...p,status:'superseded'}:p)].slice(0,200));return reply(result);
+    }
     if(path==='/api/application-receipt'){
-      const snapshot=await mergedSnapshot(bucket),p=snapshot.packages.find(p=>p.id===body.package_id);if(!p)throw Error('Package not found');const artifact=await cvArtifact(p);if(body.cv_sha256!==artifact.sha256)throw Error('Submitted CV checksum does not match this package');
+      const snapshot=await mergedSnapshot(bucket),p=snapshot.packages.find(p=>p.id===body.package_id);if(!p)throw Error('Package not found');const artifact=await packageArtifact(bucket,p);if(body.cv_sha256!==artifact.sha256)throw Error('Submitted CV checksum does not match this package');
       return reply(await recordConfirmedApplication(bucket,body,snapshot));
     }
     if(path==='/api/application-runner-status'){
@@ -533,7 +560,7 @@ export async function handle(req,env){
       if(typeof body.package_id!=='string'||body.package_id.length>250||!['approved_for_manual_action','rejected'].includes(body.decision))throw new Error('Invalid review decision');
       const snapshot=await mergedSnapshot(bucket);const p=snapshot?.packages?.find(x=>x.id===body.package_id);if(!p)throw new Error('Package is not present in the current snapshot');
       if(body.decision==='approved_for_manual_action'){if(['superseded','rejected','requires_revision'].includes(p.status)||p.writing_profile_version&&p.writing_profile_version!==WRITING_PROFILE.version)throw new Error('Regenerate this package using the current writing profile before approval');const j=snapshot.jobs.find(x=>x.id===p.job_id);const a=j?.assessment;const age=Date.now()-Date.parse(j?.verified||'');if(!j?.open||!['A','B'].includes(a?.tier)||a?.duplicate_applications?.length||a?.duplicate_listing_of||a?.compensation?.status!=='meets_floor'||!Number.isFinite(a?.compensation?.monthly_min)||a.compensation.monthly_min<2500||!Number.isFinite(age)||age>86400000||j.raw_hash!==p.job_version||!p.payload_hash)throw new Error('Resolve salary, eligibility, verification, or package-version evidence before approval');}
-      const artifact=body.decision==='approved_for_manual_action'?await cvArtifact(p):null;
+      const artifact=body.decision==='approved_for_manual_action'?await packageArtifact(bucket,p):null;
       type='review';payload={package_id:body.package_id,decision:body.decision,job_version:p.job_version||null,payload_hash:p.payload_hash||p.hash||null,snapshot_at:snapshot.at,...(artifact?{cv_artifact:{sha256:artifact.sha256,filename:artifact.filename,document_version:artifact.document_version,package_hash:artifact.package_hash}}:{})};
     }else return reply({error:'Sending, submission, and unsupported actions are unavailable in this review console'},403);
     const command=await queue(bucket,type,payload,req.headers.get('Idempotency-Key')||body.request_id);
@@ -541,3 +568,5 @@ export async function handle(req,env){
   }catch(error){return reply({error:error instanceof SyntaxError?'Invalid JSON request':String(error.message||'Request failed').slice(0,180),...(error.diagnostic?{diagnostic:error.diagnostic}:{})},400)}
 }
 export default {fetch:handle,async scheduled(event,env,ctx){ctx.waitUntil(hostedDiscover(env,{idempotency_key:'scheduled-'+new Date(event.scheduledTime).toISOString().slice(0,16)}))}};
+
+export async function runNativeCVTask(env,id){return executeNativeCVDraft(env,id,CV_TAILORING_INSTRUCTIONS);}

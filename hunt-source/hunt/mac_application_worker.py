@@ -36,6 +36,8 @@ def process_candidate(client,candidate,engine,policy,root=ROOT,adapter_factory=P
     if not package_id:
         package=client.request('/api/package',body={'job_id':job_id,'use_ai':True});package_id=package.get('id')
         if not package_id:raise ValueError('Tailored CV generation did not return a saved package')
+    from native_google_cv import prepare_native_package
+    package_id=prepare_native_package(client,package_id,root)['id']
     context=client.context(job_id,package_id);job=context['job'];package=context['package']
     # Validate all non-form gates before opening the employer page.
     probe={'job_id':job_id,'job_version':job['raw_hash'],'package_id':package_id,'package_hash':package['payload_hash'],'application_url':job['application_url'],'cv_artifact':context['cv_artifact'],'uploads':{'resume':{'sha256':context['cv_artifact']['sha256']}}}

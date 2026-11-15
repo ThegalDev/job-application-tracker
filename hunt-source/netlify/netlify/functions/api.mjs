@@ -24,7 +24,7 @@ export default async function(request){
   // Never trust browser-supplied platform identity headers on a new host.
   headers.delete('oai-authenticated-user-id');
   if(ownerSession(request,ownerKey)||ownerKey&&same(headers.get('X-HUNT-Owner-Key'),ownerKey))headers.set('oai-authenticated-user-id','netlify-owner');
-  try{const env=await environment();env.dispatchDiscovery=id=>dispatchDiscovery(env,id,new URL(request.url).origin,process.env.HUNT_SERVICE_KEY||'');return await handle(new Request(request,{headers}),env);}
+  try{const env=await environment();env.dispatchNativeCV=async id=>{const response=await fetch(new URL('/.netlify/functions/native-cv-background',request.url),{method:'POST',redirect:'error',signal:AbortSignal.timeout(10000),headers:{'Content-Type':'application/json','X-HUNT-Background-Key':process.env.HUNT_SERVICE_KEY||''},body:JSON.stringify({id})});if(response.status!==202)throw Error('Native CV background dispatch not confirmed');};env.dispatchDiscovery=id=>dispatchDiscovery(env,id,new URL(request.url).origin,process.env.HUNT_SERVICE_KEY||'');return await handle(new Request(request,{headers}),env);}
   catch(error){return Response.json({error:'HUNT could not load its Netlify storage. No operation is confirmed.'},{status:503,headers:{'Cache-Control':'no-store'}});}
 }
 export const config={path:'/api/*'};

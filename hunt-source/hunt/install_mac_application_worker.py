@@ -11,7 +11,7 @@ LABEL='com.hunt.application-worker'
 PYTHON='/Users/theoneglobal/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3'
 if __name__=='__main__':
     target=Path.home()/'Library/Application Support/HUNT/application-worker';target.mkdir(parents=True,exist_ok=True,mode=0o700);target.chmod(0o700)
-    for name in ['mac_application_worker.py','application_runner.py','application_execution.py','standing_authorization.py','employer_browser.mjs']:
+    for name in ['mac_application_worker.py','application_runner.py','application_execution.py','standing_authorization.py','employer_browser.mjs','native_google_cv.py']:
         shutil.copy2(ROOT/name,target/name)
     private=target/'data';private.mkdir(exist_ok=True,mode=0o700);private.chmod(0o700)
     save_authorization(private,'owner authorized in HUNT workspace conversation',True)
