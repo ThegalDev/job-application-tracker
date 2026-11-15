@@ -45,3 +45,15 @@ test('saved manual applications reach owner state and suppress repeat job sugges
  const b=new Bucket();await b.put('hunt/owner.json','{"id":"owner"}');await b.put('hunt/snapshot.json',JSON.stringify({snapshot:{...snapshot,facts:[],packages:[],sources:[],events:[]}}));await recordApplied(b,body,snapshot);
  const r=await handle(new Request('https://hunt.example/api/state',{headers:{'oai-authenticated-user-id':'owner'}}),{BUCKET:b,HUNT_PUBLIC_READ:'true'}),state=await r.json();assert.equal(state.applications.length,1);assert.equal(state.jobs[0].assessment.duplicate_applications.length,1);assert.equal(state.jobs[0].assessment.status,'Already applied');assert.equal(state.applications[0].applied,body.applied_date);
 });
+test('quick apply returns before Google sync and undo removes only owner marks',async()=>{
+ const b=new Bucket(),fail=()=>{throw Error('must not contact Google during quick action')};
+ const r=await recordApplied(b,{...body,defer_sync:true},snapshot,fail);assert.equal(r.applied,true);assert.equal((await manualApplications(b)).length,1);
+ const undo=await recordApplied(b,{job_id:job.id,applied:false},snapshot,fail);assert.equal(undo.applied,false);assert.equal((await manualApplications(b)).length,0);assert.equal((await manualApplications(b,true)).length,1);
+ await recordApplied(b,{...body,defer_sync:true},snapshot,fail);assert.equal((await manualApplications(b)).length,1);
+});
+test('undo clears only the exact HUNT-created Sheet row, preserving existing history',async()=>{
+ const b=new Bucket(),p=provider();await connectTracker(b,grant,p.fetcher);const r=await recordApplied(b,body,snapshot,p.fetcher);
+ await recordApplied(b,{job_id:job.id,applied:false},snapshot);
+ let cleared=0;const fetcher=async(url,opts)=>{if(String(url).endsWith(':clear')){assert.match(decodeURIComponent(String(url)),/A3:J3:clear$/);p.rows[2]=[];cleared++;return Response.json({});}return p.fetcher(url,opts)};
+ assert.equal((await syncTracker(b,r.application.id,fetcher)).status,'removed');assert.equal(cleared,1);assert.equal(p.rows[1][9],'Preserve this note');
+});

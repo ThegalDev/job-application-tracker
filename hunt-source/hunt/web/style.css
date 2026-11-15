@@ -5,3 +5,5 @@
 .job-actions{display:flex;flex-direction:column;gap:6px;align-items:stretch}.job-actions .quiet{font-size:11px;padding:4px 8px}
 
 .job-actions .quiet{border:1px solid #b9c9bb;border-radius:8px;background:var(--white);padding:8px 11px;color:var(--ink);cursor:pointer}.job-actions .quiet:hover{border-color:#194f45;background:#edf3e8}.job-actions .quiet:disabled{cursor:default;opacity:.6}.detail-block:has(#applied-date),.detail-block:has(#applied-evidence),.detail-block:has(#applied-notes){display:block}.detail-block input,.detail-block textarea{display:block;width:100%;margin-top:8px;padding:10px;border:1px solid var(--line);border-radius:7px;font:inherit}
+
+.job-actions [data-mark-applied][aria-pressed="true"]{background:#e2efd8;border-color:#8dac7c;color:var(--forest);font-weight:600}

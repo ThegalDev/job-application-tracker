@@ -21,17 +21,19 @@ export async function connectTracker(bucket,connection,fetcher=fetch){
  const api=await google(connection,fetcher),meta=await api('?fields=spreadsheetId,sheets(properties)');if(meta.spreadsheetId!==TRACKER_ID||!meta.sheets.some(s=>s.properties.title==='Applications'))throw Error('Authorized tracker tab was not found');
  await write(bucket,CONNECTION,Object.fromEntries(['account','scopes','client_id','client_secret','refresh_token'].map(k=>[k,connection[k]])));return trackerStatus(bucket);
 }
-export async function manualApplications(bucket){const list=await bucket.list({prefix:PREFIX,limit:1000});if(list.truncated)throw Error('Application history needs pagination before continuing');const rows=[];for(const x of list.objects||[]){const row=await read(bucket,x.key);if(row)rows.push(row)}return rows;}
+export async function manualApplications(bucket,includeRemoved=false){const list=await bucket.list({prefix:PREFIX,limit:1000});if(list.truncated)throw Error('Application history needs pagination before continuing');const rows=await Promise.all((list.objects||[]).map(x=>read(bucket,x.key)));return rows.filter(row=>row&&(includeRemoved||!row.removed_at));}
 async function appId(job){const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(norm(job.company)+'|'+norm(job.title)));return 'manual-'+Array.from(new Uint8Array(bytes),x=>x.toString(16).padStart(2,'0')).join('').slice(0,32)}
 export async function recordApplied(bucket,body,snapshot,fetcher=fetch){
- const job=snapshot.jobs.find(j=>j.id===body.job_id);if(!job)throw Error('Job not found');if(body.confirmed!==true)throw Error('Confirm that you already submitted this application');
+ const job=snapshot.jobs.find(j=>j.id===body.job_id);if(!job)throw Error('Job not found');if(body.applied===false){const id=await appId(job),key=PREFIX+id+'.json',row=await read(bucket,key);if(!row)return {applied:false};await write(bucket,key,{...row,removed_at:new Date().toISOString(),tracker_sync:{...row.tracker_sync,status:'pending'}});return {applied:false,application_id:id};}if(body.confirmed!==true)throw Error('Confirm that you already submitted this application');
  const date=String(body.applied_date||''),today=new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Lagos'});
  if(!/^20\d{2}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date))||new Date(date).toISOString().slice(0,10)!==date||date>today)throw Error('Choose a valid application date that is not in the future');
  const notes=String(body.notes||'').trim();if(notes.length>2000)throw Error('Application notes are too long');let evidence=null;if(body.evidence_url){const u=new URL(body.evidence_url);if(u.protocol!=='https:'||u.username||u.password||u.href.length>2000)throw Error('Evidence must be an HTTPS link');evidence=u.href;}
  const existing=snapshot.applications.find(a=>norm(a.company)===norm(job.company)&&norm(a.role)===norm(job.title));
  if(existing)return {application:existing,replayed:true,message:'This role is already in Applications. Its existing status was preserved.'};
  const id=await appId(job),key=PREFIX+id+'.json';let row=await read(bucket,key);
+ if(row?.removed_at){row={...row,removed_at:null,tracker_sync:{status:'pending'}};await write(bucket,key,row);}
  if(!row){row={id,job_id:job.id,company:job.company,role:job.title,applied:date,status:'Application reported',latest:new Date().toISOString(),evidence,notes,posting_url:job.original_application_url||job.url,recorded_by:'owner',employer_acknowledged:false,employer_form_submitted_by_hunt:false,tracker_sync:{status:'pending'}};const saved=await write(bucket,key,row,{onlyIf:{etagDoesNotMatch:'*'}});if(!saved)row=await read(bucket,key);}
+ if(body.defer_sync)return {application:row,applied:true};
  const sync=await syncTracker(bucket,id,fetcher);return {application:{...row,tracker_sync:sync},message:sync.status==='synced'?'Applied recorded in Applications and verified in your Google tracker.':'Applied recorded in Applications. Google tracker: '+(sync.reason||sync.status)};
 }
 export async function syncTracker(bucket,id,fetcher=fetch){
@@ -47,6 +49,13 @@ export async function syncTracker(bucket,id,fetcher=fetch){
   const limit=Math.min(tab.properties.gridProperties.rowCount,1000),range=encodeURIComponent("'Applications'!A1:J"+limit),data=await api('/values/'+range+'?valueRenderOption=FORMATTED_VALUE'),rows=data.values||[];
   if(JSON.stringify(rows[0])!==JSON.stringify(HEADERS))throw Error('Tracker columns changed; no row was written');if(rows.length>=limit)throw Error('Tracker read bound reached; no row was written');
   const marker='HUNT-ID:'+id,found=rows.findIndex((r,i)=>i>0&&(String(r[9]||'').includes(marker)||norm(r[1])===norm(row.company)&&norm(r[2])===norm(row.role)));
+  if(row.removed_at){
+   if(found<1)return save({status:'removed',verified_at:new Date().toISOString()});
+   const observed=rows[found];if(!String(observed[9]||'').includes(marker)||observed[5]!=='Application reported')return save({status:'preserved',reason:'Existing employer history was preserved; only the HUNT checkmark was undone'});
+   await api('/values/'+encodeURIComponent("'Applications'!A"+(found+1)+':J'+(found+1))+':clear',{});
+   const checked=await api('/values/'+range+'?valueRenderOption=FORMATTED_VALUE');if((checked.values||[]).some(r=>String(r[9]||'').includes(marker)))throw Error('Tracker undo readback did not match');
+   return save({status:'removed',verified_at:new Date().toISOString()});
+  }
   if(found>0)return save({status:'synced',range:'Applications!A'+(found+1)+':J'+(found+1),existing:true,verified_at:new Date().toISOString()});
   if(['uncertain','sending'].includes(row.tracker_sync?.status))return save({status:'uncertain',reason:'Earlier write is unconfirmed; no duplicate append was attempted'});
   const probe=await api('?includeGridData=true&ranges='+encodeURIComponent("'Applications'!A2:J2")+'&fields=sheets(data(rowData(values(userEnteredFormat,dataValidation))))');

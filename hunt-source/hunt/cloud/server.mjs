@@ -471,11 +471,11 @@ export async function handle(req,env){
     if(req.method!=='POST')return reply({error:'Not found'},404);
     if(!csrf(req))return reply({error:'Origin or CSRF denied',code:'CSRF_TOKEN_MISMATCH'},403);
     const body=await jsonBody(req);let type,payload;
-    if(path==='/api/applications/applied')return reply(await recordApplied(bucket,body,await mergedSnapshot(bucket)));
+    if(path==='/api/applications/applied'){const [saved,cloud]=await Promise.all([read(bucket,SNAPSHOT),read(bucket,CLOUD_JOBS,{jobs:[]})]);const base=saved?.snapshot||{jobs:[],applications:[]};return reply(await recordApplied(bucket,body,{...base,jobs:[...(base.jobs||[]),...(cloud.jobs||[])]}));}
     if(path==='/api/tracker/connect')return reply(await connectTracker(bucket,body));
     if(path==='/api/tracker/sync'){const result=await syncTracker(bucket,body.application_id);return reply({...result,message:result.status==='synced'?'Application verified in your Google tracker.':result.reason});}
     if(path==='/api/tracker/sync-pending'){const rows=(await manualApplications(bucket)).filter(a=>a.tracker_sync?.status!=='synced').slice(0,25);const results=[];for(const row of rows)results.push({id:row.id,...await syncTracker(bucket,row.id)});return reply({results});}
-    if(path==='/api/job-visibility'){const snapshot=await mergedSnapshot(bucket);return reply(await updateVisibility(bucket,body,snapshot.jobs));}
+    if(path==='/api/job-visibility'){const [saved,cloud]=await Promise.all([read(bucket,SNAPSHOT),read(bucket,CLOUD_JOBS,{jobs:[]})]);return reply(await updateVisibility(bucket,body,[...(saved?.snapshot?.jobs||[]),...(cloud.jobs||[])]));}
     if(path==='/api/notifications/connect')return reply(await connectNotifications(bucket,body));
     if(path==='/api/notifications/test')return reply(await notifyRun(bucket,{id:'connection-test-'+crypto.randomUUID(),status:'success',finished:new Date().toISOString()}));
     if(path==='/api/discover'||path==='/api/run'&&['full','discovery','shortlist'].includes(body.trigger||'full')){

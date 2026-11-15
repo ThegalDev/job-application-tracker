@@ -1,6 +1,6 @@
 {
   "source_folder": "/Users/theoneglobal/Documents/Codex/2026-11-12/referenced-chatgpt-conversation-this-is-an/outputs/hunt",
-  "file_count": 65,
+  "file_count": 66,
   "files": [
     {
       "path": "hunt/CONNECTOR-BRIDGE.md",
@@ -34,8 +34,8 @@
     },
     {
       "path": "hunt/cloud/applications.mjs",
-      "bytes": 11515,
-      "sha256": "501443a26639041910482a3ae4d6bc6a7447b5d5befe1d7ac240de3f57fb176f"
+      "bytes": 12744,
+      "sha256": "695445f1f6677b828f6f0e07bf5d97d5168760a797901b1d7a0d76d65ccb10f5"
     },
     {
       "path": "hunt/cloud/build-cloud.py",
@@ -64,8 +64,8 @@
     },
     {
       "path": "hunt/cloud/server.mjs",
-      "bytes": 106085,
-      "sha256": "e6d010df37f9b06c8c5cd00c6a169dd3f980ce77534bdca67b2d180de320f42c"
+      "bytes": 106357,
+      "sha256": "4533d8b0b4c001069c28a245080d96fe8249a67472b214bd91dfdcbd23129a74"
     },
     {
       "path": "hunt/cloud/test_action_controls.mjs",
@@ -93,6 +93,11 @@
       "sha256": "36cad4d83ebe69d5e31b5608975a9d15fefa03ff32b6e7f504793e419af83ca1"
     },
     {
+      "path": "hunt/cloud/test_inline_actions.mjs",
+      "bytes": 1624,
+      "sha256": "1506b59bdeb6fa438b9208a9a4780c9512050c9cf09730f87dbee333efb2806a"
+    },
+    {
       "path": "hunt/cloud/test_job_visibility.mjs",
       "bytes": 4498,
       "sha256": "5f1c43201e208de20615a1091a5768f04a5f5ec5a1b48e6fabf7d220474934e1"
@@ -109,8 +114,8 @@
     },
     {
       "path": "hunt/cloud/test_manual_applications.mjs",
-      "bytes": 6831,
-      "sha256": "23183ec9348a9fe398da03d11965a97e005d25094928b0c74b612d4c60252f0c"
+      "bytes": 8186,
+      "sha256": "bd62b0d815fd2cdf8f8034523b7c50e37b91a26ae5eff5b48dc5975f7a4b30ac"
     },
     {
       "path": "hunt/cloud/test_notifications.mjs",
@@ -309,8 +314,8 @@
     },
     {
       "path": "hunt/web/app.js",
-      "bytes": 46519,
-      "sha256": "45a868486fd09dc9f1de4ed11ba64ececcfcbf04c44681ed9664dc573f7d6134"
+      "bytes": 47931,
+      "sha256": "452c4e60d1fc1d52df8c1388570a6e924f4c9297d7f87a47e9e3cefa516c589a"
     },
     {
       "path": "hunt/web/index.html",
@@ -319,8 +324,8 @@
     },
     {
       "path": "hunt/web/style.css",
-      "bytes": 9782,
-      "sha256": "369f932fb8a9e9adfe18f652480118e68deda558cf0b66de02567a4317aff320"
+      "bytes": 9914,
+      "sha256": "d944a6d4e53d67ad70879f52a1cdffd164fb9e4a99aaecd43c2060e6667c0657"
     },
     {
       "path": "hunt/writing-profile.json",
