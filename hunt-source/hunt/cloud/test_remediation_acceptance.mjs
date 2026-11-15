@@ -81,7 +81,7 @@ test('hosted missing Google pipeline returns blocker and never reports inbox che
  assert.equal((await request(env,'/api/state')).data.bridge.pending_commands,0);
 });
 test('review intent remains queued, never mislabeled completed approval',async()=>{
- const env=await environment([posting()]);await app.hostedPackage(env,'fixture:one',false);const state=await request(env,'/api/state');const p=state.data.packages[0];
+ const env=await environment([posting()]);const text='Fixture Candidate\nHR Professional\nPROFESSIONAL SUMMARY\nVerified recruitment and employee lifecycle work.\nCORE COMPETENCIES\nRecruitment and HR operations.\nPROFESSIONAL EXPERIENCE\nFixture Employer\nSupported onboarding.\nEDUCATION\nVerified qualification.';await env.BUCKET.put('hunt/private/master-cv.json',JSON.stringify({text,sha256:createHash('sha256').update(text).digest('hex')}));await app.hostedPackage(env,'fixture:one',false);const state=await request(env,'/api/state');const p=state.data.packages[0];
  const review=await request(env,'/api/review',{method:'POST',body:{package_id:p.id,decision:'approved_for_manual_action'},token:state.data.csrf});
  assert.equal(review.response.status,202);assert.equal(review.data.queued,true);assert.equal(review.data.status,'queued');assert.match(review.data.message,/not executed|queued/i);
  const next=(await request(env,'/api/state')).data;assert.notEqual(next.packages.find(x=>x.id===p.id).status,'approved_for_manual_action');

@@ -1,6 +1,6 @@
 {
   "source_folder": "/Users/theoneglobal/Documents/Codex/2026-11-12/referenced-chatgpt-conversation-this-is-an/outputs/hunt",
-  "file_count": 66,
+  "file_count": 68,
   "files": [
     {
       "path": "hunt/CONNECTOR-BRIDGE.md",
@@ -39,8 +39,13 @@
     },
     {
       "path": "hunt/cloud/build-cloud.py",
-      "bytes": 2806,
-      "sha256": "37116cb2a67e4cf30d28fb8e6fc57bd9fc5d811553d9afec5268f4ea3d9e92a3"
+      "bytes": 3056,
+      "sha256": "4dc586711e6b8b1c79b907431644eb548dbb5ba033b50854bc25de39df2a9af5"
+    },
+    {
+      "path": "hunt/cloud/cv-document.mjs",
+      "bytes": 7376,
+      "sha256": "9d1dcca92ea055baedea2056964bfbd14e3bad22801aacdff75dfb4b443d04ed"
     },
     {
       "path": "hunt/cloud/netlify/discovery-background.mjs",
@@ -64,8 +69,8 @@
     },
     {
       "path": "hunt/cloud/server.mjs",
-      "bytes": 106357,
-      "sha256": "4533d8b0b4c001069c28a245080d96fe8249a67472b214bd91dfdcbd23129a74"
+      "bytes": 107778,
+      "sha256": "26ed1a8bf9b7647dfb3b3b43478bef8867a635ae6a3cb67fd216e9f3a7705034"
     },
     {
       "path": "hunt/cloud/test_action_controls.mjs",
@@ -74,13 +79,18 @@
     },
     {
       "path": "hunt/cloud/test_cloud.mjs",
-      "bytes": 6180,
-      "sha256": "fec070842510221be602216d1ecd47a48217d8c186172b36f67a58b01090e278"
+      "bytes": 6595,
+      "sha256": "a63fc8f62a2b300e7c9802c1b4ad2c5aa751c5092d92dda6ff9674d1629cf9f5"
     },
     {
       "path": "hunt/cloud/test_cloud_transport.mjs",
       "bytes": 3832,
       "sha256": "fb0f30d1934f0e938f1aa5aefdab6fde5aec6e23955428ee2c8fededb591ead6"
+    },
+    {
+      "path": "hunt/cloud/test_cv_document.mjs",
+      "bytes": 3826,
+      "sha256": "0d7bbc7671e8da1fe04bd1d28d5e8e4f471a974e9dd4d142e76fe0b068ece38a"
     },
     {
       "path": "hunt/cloud/test_discovery_expansion.mjs",
@@ -149,8 +159,8 @@
     },
     {
       "path": "hunt/cloud/test_remediation_acceptance.mjs",
-      "bytes": 31653,
-      "sha256": "d5615a8db43a7b0758a44427d288514ed33094433eefea72f537ab4eafc2fc1d"
+      "bytes": 32057,
+      "sha256": "6305d7f54eed736f165016e5a361c864458429125762c13369b9d94e8f3ce6bc"
     },
     {
       "path": "hunt/cloud/visibility.mjs",
@@ -314,8 +324,8 @@
     },
     {
       "path": "hunt/web/app.js",
-      "bytes": 47931,
-      "sha256": "452c4e60d1fc1d52df8c1388570a6e924f4c9297d7f87a47e9e3cefa516c589a"
+      "bytes": 49235,
+      "sha256": "0513e1580c76e8bb6c35be48fc90369ff1a86d2212665291633f9b212ce56ea9"
     },
     {
       "path": "hunt/web/index.html",
