@@ -14,6 +14,9 @@ test('complete native mapping preserves paragraph boundaries, metrics and protec
  assert.throws(()=>validateNativeRewrites(source,{replacements:[]}));assert.throws(()=>validateNativeRewrites(source,{replacements:[{id:1,text:source[0].text},{id:2,text:'Invented degree'}]}));
  assert.doesNotThrow(()=>validateNativeRewrites([{id:1,text:'Built a practical recruitment assistant workflow.',editable:true,kind:'bullet'}],{replacements:[{id:1,text:'Built a practical recruitment assistant workflow using n8n.'}]}));
  assert.doesNotThrow(()=>validateNativeRewrites(source,{replacements:[{id:1,text:'Maintained accurate records for 1000 employees.'}]}));
+ const project=[{id:0,text:'PROJECTS',editable:false},{id:1,text:'Culture project',editable:false},{id:2,text:'Tech Stack: Next.js 14, TypeScript, React',editable:false},{id:3,text:'Built a useful culture platform for HR teams.',kind:'bullet',editable:true}];
+ assert.doesNotThrow(()=>validateNativeRewrites(project,{replacements:[{id:3,text:'Built a useful culture platform for HR teams using Next.js 14.'}]}));
+ assert.throws(()=>validateNativeRewrites(project,{replacements:[{id:3,text:'Built a useful culture platform serving 14 HR teams.'}]}));
 });
 test('native draft reserves once and repeated background delivery does not call the model twice',async()=>{
  const BUCKET=new Bucket(),env={BUCKET,OPENAI_API_KEY:'fixture'},input={source_doc_id:'1u9NQcSpOF1jRwHUmN-LeKZTWazENUoQjvYV8xzkLsGQ',source_revision:'revision',paragraphs:[{id:1,text:'Maintained accurate employee records.',editable:true,kind:'bullet'}]};

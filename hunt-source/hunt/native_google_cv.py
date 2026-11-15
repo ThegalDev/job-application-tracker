@@ -63,6 +63,19 @@ def mapping(doc):
     if len(rows)!=177 or signature(doc)['bullets']!=90:raise ValueError('Master template changed; review mapping before unattended editing')
     return result
 
+def project_tool_versions(plan):
+    contexts={};group=[];active=False
+    def flush():
+        phrases=[phrase for p in group if re.match(r'^(Tech Stack|Stack):',p['text'].strip()) for phrase in re.findall(r'\b[A-Za-z][\w.+-]*\s+\d+(?:\.\d+)*\b',p['text'])]
+        for p in group:contexts[p['id']]=phrases
+        group.clear()
+    for p in plan:
+        if p['text'].strip()=='PROJECTS':active=True;continue
+        if not active:continue
+        if not p['editable'] and p['text'].strip() and not re.match(r'^(Tech Stack|Stack):',p['text'].strip()):flush()
+        group.append(p)
+    flush();return contexts
+
 class NativeGoogleCV:
     def __init__(self,root):
         self.root=Path(root);grant=json.loads((self.root/'data/cv-google.json').read_text())
@@ -96,11 +109,15 @@ class NativeGoogleCV:
         plan=mapping(source);expected={p['id']:p for p in plan if p['editable']}
         edits={p['id']:p['text'] for p in replacements}
         if len(edits)!=len(replacements) or edits.keys()!=expected.keys():raise ValueError('All native paragraphs must be reviewed exactly once')
+        versions=project_tool_versions(plan)
         for i,new in edits.items():
             old=expected[i]['text']
             if not isinstance(new,str) or not new.strip() or re.search(r'[\n\r\v]',new):raise ValueError('Paragraph boundaries may not change')
             nums=lambda s:{n.replace(',','') for n in re.findall(r'\b\d+(?:[,.]\d+)*\b',s)}
             allowed=nums(' '.join(p['text'] for p in plan)) if expected[i]['kind']=='summary' else nums(old)
+            allowed=set(allowed)
+            for phrase in versions.get(i,[]):
+                if phrase.lower() in new.lower():allowed.update(nums(phrase))
             if nums(new)-allowed or expected[i]['kind'] not in ('summary','headline') and nums(old)-nums(new):raise ValueError('Source metrics changed')
             if expected[i]['kind']=='bullet' and len(new.split())<len(old.split())*.9:raise ValueError('Source bullet shortened')
         if self.master()['revisionId']!=source['revisionId']:raise ValueError('Master changed during drafting; start from fresh source')
@@ -150,8 +167,13 @@ class NativeGoogleCV:
 def prepare_native_package(client,package_id,root):
     google=NativeGoogleCV(root);source=google.master();plan=mapping(source)
     package=client.request('/api/package?'+urlencode({'id':package_id}))
-    if package.get('native_cv') and package['native_cv']['source_revision']==source['revisionId']:return package
+    if package.get('native_cv') and package['native_cv']['source_revision']==source['revisionId']:
+        _,_,rows=paragraphs(source);master_text='\n'.join(text(row) for row in rows)+'\n'
+        target=Path(root)/'data/master-cv.txt';fd=os.open(target,os.O_CREAT|os.O_TRUNC|os.O_WRONLY,0o600)
+        with os.fdopen(fd,'w') as out:out.write(master_text)
+        return package
     task=client.request('/api/native-cv-draft',body={'job_id':package['job_id'],'source_doc_id':MASTER,'source_revision':source['revisionId'],'paragraphs':plan})
+    task=client.request('/api/native-cv-draft?'+urlencode({'id':task['id']}))
     deadline=time.monotonic()+570
     while task['status'] in ('queued','running') and time.monotonic()<deadline:
         time.sleep(3);task=client.request('/api/native-cv-draft?'+urlencode({'id':task['id']}));private_json(Path(root)/'data/native-cv-task.json',task)

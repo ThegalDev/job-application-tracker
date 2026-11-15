@@ -11,13 +11,18 @@ export async function createNativeCVTask(bucket,body,job){
  await write(bucket,key,{id,status:'queued',created_at:new Date().toISOString(),input},{onlyIf:{etagDoesNotMatch:'*'}});return {id,status:'queued'};
 }
 export async function nativeCVTask(bucket,id){if(!/^[a-f0-9]{64}$/.test(id||''))throw Error('Invalid CV task identity');const t=await read(bucket,PREFIX+id+'.json');return t?{id:t.id,status:t.status,result:t.result||null,error:t.error||null,...(t.status==='failed'&&t.candidate?{failed_draft:t.candidate}:{})}:null;}
+function projectToolVersions(paragraphs){
+ const contexts=new Map();let active=false,group=[];
+ const flush=()=>{const phrases=group.filter(p=>/^(Tech Stack|Stack):/.test(p.text.trim())).flatMap(p=>p.text.match(/\b[A-Za-z][\w.+-]*\s+\d+(?:\.\d+)*\b/g)||[]);for(const p of group)contexts.set(p.id,phrases);group=[];};
+ for(const p of paragraphs){if(p.text.trim()==='PROJECTS'){active=true;continue}if(!active)continue;if(!p.editable&&p.text.trim()&&!/^(Tech Stack|Stack):/.test(p.text.trim()))flush();group.push(p)}flush();return contexts;
+}
 export function validateNativeRewrites(paragraphs,result){
  if(!result||!Array.isArray(result.replacements))throw Error('Native CV output has no paragraph mapping');
  const expected=paragraphs.filter(p=>p.editable),map=new Map();for(const item of result.replacements){if(!Number.isInteger(item.id)||map.has(item.id)||typeof item.text!=='string'||!item.text.trim()||item.text.length>10000||/[\n\r\u000b]/.test(item.text))throw Error('Native CV output changes paragraph boundaries');map.set(item.id,item.text);}
  if(map.size!==expected.length||expected.some(p=>!map.has(p.id)))throw Error('Native CV output omitted or added a required paragraph');
  const numbers=t=>new Set((t.match(/\b\d+(?:[,.]\d+)*\b/g)||[]).map(n=>n.replaceAll(',',''))),allNumbers=numbers(paragraphs.map(p=>p.text).join(' '));
- const invalid=[];
- for(const p of expected){const text=map.get(p.id),supported=p.kind==='summary'?allNumbers:numbers(p.text);let reason;
+ const versions=projectToolVersions(paragraphs),invalid=[];
+ for(const p of expected){const text=map.get(p.id),supported=new Set(p.kind==='summary'?allNumbers:numbers(p.text));for(const phrase of versions.get(p.id)||[])if(text.toLowerCase().includes(phrase.toLowerCase()))for(const n of numbers(phrase))supported.add(n);let reason;
   if([...numbers(text)].some(n=>!supported.has(n)))reason='introduced an unsupported metric';
   else if(p.kind!=='summary'&&p.kind!=='headline'&&[...numbers(p.text)].some(n=>!numbers(text).has(n)))reason='removed a source metric';
   else if(p.kind==='bullet'&&text.trim().split(/\s+/).length<Math.ceil(p.text.trim().split(/\s+/).length*.9))reason='shortened a source bullet';
