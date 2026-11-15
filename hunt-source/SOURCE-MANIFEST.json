@@ -59,8 +59,8 @@
     },
     {
       "path": "hunt/cloud/server.mjs",
-      "bytes": 104696,
-      "sha256": "6c5143f76cb186b2db57bd434be58ec23c0c09aee8f1ad9d96d44a4253aab5f8"
+      "bytes": 104785,
+      "sha256": "9219583d965ee19f24e500f4cc5a31d0528f911903fc354de2ce4ae8a5bbbb05"
     },
     {
       "path": "hunt/cloud/test_action_controls.mjs",
@@ -89,8 +89,8 @@
     },
     {
       "path": "hunt/cloud/test_job_visibility.mjs",
-      "bytes": 4355,
-      "sha256": "5be4861923554ccedb1c179cfd966cf4a250f28183c1e6a10a7405a7ba549e08"
+      "bytes": 4498,
+      "sha256": "5f1c43201e208de20615a1091a5768f04a5f5ec5a1b48e6fabf7d220474934e1"
     },
     {
       "path": "hunt/cloud/test_lead_visibility.mjs",
@@ -294,8 +294,8 @@
     },
     {
       "path": "hunt/web/app.js",
-      "bytes": 43908,
-      "sha256": "d74fe5a6bd6932245881b625e9ef590b256bb37faa355330ff83ad7b59f73be4"
+      "bytes": 43930,
+      "sha256": "5aeae20dc4ea04eb87cee5ae275ae7051e702a6324e865ab51f47a3f8e17e469"
     },
     {
       "path": "hunt/web/index.html",

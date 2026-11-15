@@ -16,10 +16,10 @@ test('employer hiding persists across new postings; per-role hiding can be indep
  await updateVisibility(b,{scope:'job',hidden:false,job_id:'one'},jobs);assert.equal(jobVisibility(jobs[0],await visibilitySettings(b)).hidden,false);
 });
 test('owner hide action changes job visibility without deleting application history',async()=>{
- const b=new Bucket(),history=[{id:'application',company:'Moniepoint',role:'Earlier role',status:'Rejected'}];await b.put('hunt/owner.json','{"id":"owner"}');await b.put('hunt/snapshot.json',JSON.stringify({snapshot:{jobs:[job('one')],applications:history,packages:[],facts:[],sources:[],events:[]}}));
+ const b=new Bucket(),history=[{id:'application',company:'Moniepoint',role:'Earlier role',status:'Rejected'}];await b.put('hunt/owner.json','{"id":"owner"}');await b.put('hunt/snapshot.json',JSON.stringify({snapshot:{jobs:[job('one')],applications:history,packages:[{id:'saved-draft',job_id:'one',company:'Moniepoint'}],facts:[],sources:[],events:[]}}));
  const env={BUCKET:b,HUNT_PUBLIC_READ:'true'},request=(path,opts={})=>handle(new Request('https://hunt.example'+path,{...opts,headers:{'oai-authenticated-user-id':'owner',...opts.headers}}),env),state=await(await request('/api/state')).json();
  const result=await request('/api/job-visibility',{method:'POST',headers:{Origin:'https://hunt.example','Content-Type':'application/json',Cookie:'__Host-hunt_csrf='+state.csrf,'X-CSRF-Token':state.csrf},body:JSON.stringify({scope:'employer',hidden:true,company:'Moniepoint'})});assert.equal(result.status,200);
- const next=await(await request('/api/state')).json();assert.equal(next.jobs[0].hidden,true);assert.deepEqual(next.applications,history);
+ const next=await(await request('/api/state')).json();assert.equal(next.jobs[0].hidden,true);assert.deepEqual(next.applications,history);assert.equal(next.packages[0].id,'saved-draft');assert.equal(next.packages[0].hidden,true);
  const denied=await handle(new Request('https://hunt.example/api/job-visibility',{method:'POST',headers:{'Content-Type':'application/json'},body:'{"scope":"employer","company":"Moniepoint","hidden":false}'}),env);assert.equal(denied.status,401);
 });
 test('hidden jobs stay out of ordinary views and appear only in the explicit management view',()=>{
