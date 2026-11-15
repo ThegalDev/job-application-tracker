@@ -1,6 +1,6 @@
 {
   "source_folder": "/Users/theoneglobal/Documents/Codex/2026-11-12/referenced-chatgpt-conversation-this-is-an/outputs/hunt",
-  "file_count": 73,
+  "file_count": 78,
   "files": [
     {
       "path": "hunt/APPLICATION-RUNNER-SETUP.md",
@@ -24,8 +24,8 @@
     },
     {
       "path": "hunt/application_browser.mjs",
-      "bytes": 4759,
-      "sha256": "d7899571eae0fe8f4079646ecb8d93f3ea12d9c0af2733626b7880e03e456ae5"
+      "bytes": 5116,
+      "sha256": "58694e9866ffb35071d62a8de0b54b317f9d43f7b84dfd866439b98eef39c260"
     },
     {
       "path": "hunt/application_execution.py",
@@ -34,8 +34,8 @@
     },
     {
       "path": "hunt/application_runner.py",
-      "bytes": 11506,
-      "sha256": "eef3028562cebb71515c559ed2a5ec36e914f0d81f8f3e4b0d03e160475283a5"
+      "bytes": 12148,
+      "sha256": "9877c142d80c9138f61bfbe45385539dbd55cfb843cc208f5e640018bcd93068"
     },
     {
       "path": "hunt/cloud/.gitignore",
@@ -44,13 +44,13 @@
     },
     {
       "path": "hunt/cloud/applications.mjs",
-      "bytes": 12744,
-      "sha256": "695445f1f6677b828f6f0e07bf5d97d5168760a797901b1d7a0d76d65ccb10f5"
+      "bytes": 15406,
+      "sha256": "0704dc3eb029d2bff851297ac714f6da327ff46dbc80984e2be9b65614b7ea5d"
     },
     {
       "path": "hunt/cloud/build-cloud.py",
-      "bytes": 3056,
-      "sha256": "4dc586711e6b8b1c79b907431644eb548dbb5ba033b50854bc25de39df2a9af5"
+      "bytes": 3137,
+      "sha256": "f7f3aed61a4da441ead0760f752beaaa5d6e9c877c44c4eb6c9d0e7ec48b8f8b"
     },
     {
       "path": "hunt/cloud/cv-document.mjs",
@@ -79,8 +79,8 @@
     },
     {
       "path": "hunt/cloud/server.mjs",
-      "bytes": 109060,
-      "sha256": "d7e0ae8e4f0232353335f81aa1ed4c2ed09b0da0a88919321f65af7b169889d2"
+      "bytes": 111710,
+      "sha256": "06080d3b0ed389e779b63d45ef6e14bd6aa905df16cafbf9c7617e1c7149f778"
     },
     {
       "path": "hunt/cloud/test_action_controls.mjs",
@@ -99,8 +99,8 @@
     },
     {
       "path": "hunt/cloud/test_cv_document.mjs",
-      "bytes": 5194,
-      "sha256": "414f622fe0c7377973d72a9347682248ae3183fd994be7ce5ea18d5b164db4a0"
+      "bytes": 6705,
+      "sha256": "f89a33d1fda8b93578d1f4cc6e173e3a043ca190da3f783d78ddbec9586f6607"
     },
     {
       "path": "hunt/cloud/test_discovery_expansion.mjs",
@@ -134,8 +134,8 @@
     },
     {
       "path": "hunt/cloud/test_manual_applications.mjs",
-      "bytes": 8186,
-      "sha256": "bd62b0d815fd2cdf8f8034523b7c50e37b91a26ae5eff5b48dc5975f7a4b30ac"
+      "bytes": 9494,
+      "sha256": "192b78b71259e6139b1e3ada09f711f339298e1994bc41d82f806aeac8881eed"
     },
     {
       "path": "hunt/cloud/test_notifications.mjs",
@@ -218,6 +218,16 @@
       "sha256": "86a4ecb53c3c59dbe517f94c47de3b6719a282e43009c22af15c4c87a18f0841"
     },
     {
+      "path": "hunt/install_mac_application_worker.py",
+      "bytes": 1725,
+      "sha256": "0f1bb7a8c3f58259c755ed7ebc1b1cc0bb615c162c36ee9d4963d7401270978c"
+    },
+    {
+      "path": "hunt/mac_application_worker.py",
+      "bytes": 7763,
+      "sha256": "29dad33ea24231bf1711115cc037bc4ae2f5124d9cf34f7d25a3ef6f8a141b69"
+    },
+    {
       "path": "hunt/matching.py",
       "bytes": 13201,
       "sha256": "06f45b98d36727bdbb0248ff5ad6bdc5b0b88174f60ecf12a3d2279d1311bd14"
@@ -268,19 +278,24 @@
       "sha256": "cc82f81c9d71d0b35fe738f1dbfde65a2b16d138107c7a3e78e9d04e832bd34e"
     },
     {
+      "path": "hunt/standing_authorization.py",
+      "bytes": 2907,
+      "sha256": "d33f05c3bed2d54ba123645ae971d9b8829bdf2099d5bca0821e7609b4ae820d"
+    },
+    {
       "path": "hunt/test_acceptance_v2.py",
       "bytes": 19704,
       "sha256": "6d308fb0ff292f97cd541fefe0a87f87a61e8e157ba59e1859e28200aa828a65"
     },
     {
       "path": "hunt/test_application_execution.py",
-      "bytes": 14695,
-      "sha256": "f83d3950f34813fae27cf719da8fbcd0e215acb1295309f5f0814520a519068f"
+      "bytes": 15956,
+      "sha256": "9f26a9a85e42db6c45a6960d2e2c519778b400ba4f06ddf723b8fd328918894e"
     },
     {
       "path": "hunt/test_application_runner.py",
-      "bytes": 4749,
-      "sha256": "3301e87e1e4f1e8909cc1fe08411357364387069d6ef43429f590bea720cde53"
+      "bytes": 4797,
+      "sha256": "645b00eca8d0aa9cfd9cfd4bb32b295b1c1f26c183639e00864d3ad9818aef44"
     },
     {
       "path": "hunt/test_drafting_acceptance.py",
@@ -318,6 +333,11 @@
       "sha256": "8295541305f3f89e2c23991a9345f373c65590223f405b4c87245e98a920480d"
     },
     {
+      "path": "hunt/test_mac_application_worker.py",
+      "bytes": 1226,
+      "sha256": "9c87f872241049e833b4e11f4224d7d75c1bdf17e28de63f30acfeb72b12ee3c"
+    },
+    {
       "path": "hunt/test_matching_v2.py",
       "bytes": 4466,
       "sha256": "a62eb45846f5c6127bc2e4f9bd6c2347f241676dd55c3bb7c4e0ab03f823bce6"
@@ -348,9 +368,14 @@
       "sha256": "33a915130029816296a0505cadec27678dd745d8a5d4ea49123577ca2213c0e7"
     },
     {
+      "path": "hunt/test_standing_authorization.py",
+      "bytes": 2621,
+      "sha256": "deb1f5440cb5c44fe6b5637e3a0bd2156902c54e66283a22f5a646868011876f"
+    },
+    {
       "path": "hunt/web/app.js",
-      "bytes": 49235,
-      "sha256": "0513e1580c76e8bb6c35be48fc90369ff1a86d2212665291633f9b212ce56ea9"
+      "bytes": 50862,
+      "sha256": "daaff603227103e6d2382dbd8ef3e1c62a5466347cf09b2374c4b8a7d7a655d1"
     },
     {
       "path": "hunt/web/index.html",

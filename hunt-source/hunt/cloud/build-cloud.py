@@ -14,8 +14,8 @@ notification_prelude='const {notificationStatus,connectNotifications,notifyRun}=
 visibility_source=(ROOT/'visibility.mjs').read_text().replace('export ','')
 visibility_prelude='const {visibilitySettings,jobVisibility,updateVisibility}=(()=>{'+visibility_source+';return {visibilitySettings,jobVisibility,updateVisibility};})();\n'
 application_source=(ROOT/'applications.mjs').read_text().replace('export ','')
-application_prelude='const {trackerStatus,connectTracker,manualApplications,recordApplied,syncTracker}=(()=>{'+application_source+';return {trackerStatus,connectTracker,manualApplications,recordApplied,syncTracker};})();\n'
-server_source=(ROOT/'server.mjs').read_text().replace("import {trackerStatus,connectTracker,manualApplications,recordApplied,syncTracker} from './applications.mjs';\n",'').replace("import {visibilitySettings,jobVisibility,updateVisibility} from './visibility.mjs';\n",'').replace("import {notificationStatus,connectNotifications,notifyRun} from './notifications.mjs';\n",'')
+application_prelude='const {trackerStatus,connectTracker,manualApplications,recordApplied,syncTracker,recordConfirmedApplication}=(()=>{'+application_source+';return {trackerStatus,connectTracker,manualApplications,recordApplied,syncTracker,recordConfirmedApplication};})();\n'
+server_source=(ROOT/'server.mjs').read_text().replace("import {trackerStatus,connectTracker,manualApplications,recordApplied,syncTracker,recordConfirmedApplication} from './applications.mjs';\n",'').replace("import {visibilitySettings,jobVisibility,updateVisibility} from './visibility.mjs';\n",'').replace("import {notificationStatus,connectNotifications,notifyRun} from './notifications.mjs';\n",'')
 cv_source=(ROOT/'cv-document.mjs').read_text().replace('export ','')
 cv_prelude='const {cvArtifact}=(()=>{'+cv_source+';return {cvArtifact};})();\n'
 server_source=server_source.replace("import {cvArtifact} from './cv-document.mjs';\n",'')

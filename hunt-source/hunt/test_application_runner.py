@@ -11,7 +11,7 @@ class RunnerTests(unittest.TestCase):
     def setUp(self):
         self.sha='a'*64
         self.meta={'package_id':'p','package_hash':'hash','sha256':self.sha,'filename':'CV.docx','document_version':'fixture'}
-        self.context={'paused':False,'job':{'id':'j','raw_hash':'v','open':True,'hidden':False,'within_discovery_window':True,'global_remote':True,'application_url':URL,'assessment':{'tier':'A','role_relevant':True,'compensation':{'status':'meets_floor','monthly_min':3000},'duplicate_applications':[]}},'package':{'id':'p','payload_hash':'hash','job_version':'v','status':'review','writing_profile_current':True,'master_cv_current':True},'cv_artifact':self.meta}
+        self.context={'paused':False,'job':{'id':'j','raw_hash':'v','open':True,'hidden':False,'within_discovery_window':True,'publication_verified_original':True,'global_remote':True,'application_url':URL,'assessment':{'tier':'A','score':90,'role_relevant':True,'compensation':{'status':'meets_floor','monthly_min':3000},'duplicate_applications':[]}},'package':{'id':'p','payload_hash':'hash','job_version':'v','status':'review','writing_profile_current':True,'master_cv_current':True},'cv_artifact':self.meta}
         self.payload={'job_id':'j','job_version':'v','package_id':'p','package_hash':'hash','cv_artifact':self.meta,'uploads':{'resume':{'sha256':self.sha}},'application_url':URL+'/apply'}
     def test_supported_exact_form_and_reviewed_file_pass(self):validate_context(self.context,self.payload)
     def test_all_current_application_gates_fail_closed(self):

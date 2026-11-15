@@ -1,6 +1,8 @@
 // Controlled loopback-fixture adapter only. This is deliberately not a claimed
 // production employer integration. It launches a fresh, ephemeral browser.
 import readline from 'node:readline';
+import {mkdir,chmod} from 'node:fs/promises';
+import path from 'node:path';
 const url=new URL(process.argv[2]);
 if(url.protocol!=='http:'||!['127.0.0.1','localhost','[::1]'].includes(url.hostname)||url.username||url.password)throw new Error('Only a controlled local fixture URL is permitted');
 const modulePath=process.env.HUNT_PLAYWRIGHT_MODULE||'/Users/theoneglobal/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs';
@@ -30,6 +32,7 @@ async function fill(payload){
 async function submit(payload,ident){
  const buttons=page.locator('form[data-hunt-application] button[type=submit]');if(await buttons.count()!==1)throw new Error('Submission control is ambiguous');
  await buttons.click();const confirmation=page.locator('[data-hunt-confirmation-id]');await confirmation.waitFor({state:'visible'});
+ if(process.env.HUNT_FIXTURE_EVIDENCE_DIR){const dir=path.resolve(process.env.HUNT_FIXTURE_EVIDENCE_DIR);await mkdir(dir,{recursive:true,mode:0o700});const file=path.join(dir,'local-test-confirmation.png');await page.screenshot({path:file,fullPage:true});await chmod(file,0o600);}
  return {submitted:true,confirmation_id:await confirmation.getAttribute('data-hunt-confirmation-id'),evidence_kind:'confirmation_page',evidence_url:page.url(),confirmation_text:await confirmation.innerText(),fixture_only:true};
 }
 const lines=readline.createInterface({input:process.stdin,crlfDelay:Infinity});

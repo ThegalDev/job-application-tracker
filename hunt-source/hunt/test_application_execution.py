@@ -284,8 +284,16 @@ class ExecutionTests(unittest.TestCase):
             cv = Path(self.temp.name) / 'cv.pdf'
             cv.write_bytes(b'%PDF-local-fixture-upload-verified')
             artifact={'package_id':'package-one','package_hash':'package-v1','sha256':hashlib.sha256(cv.read_bytes()).hexdigest(),'filename':'cv.pdf','document_version':'fixture'}
-            p = self.approved(form=form, uploads={'resume': str(cv)},cv_artifact=artifact)
-            result = self.engine.execute(p['id'], adapter)
+            standing_mode=os.environ.get('HUNT_FIXTURE_STANDING_AUTHORIZED')=='1'
+            if standing_mode:
+                import standing_authorization as standing
+                policy=standing.save_authorization(self.temp.name,'fixture-owner')
+                self.engine,_=standing.autonomous_engine(self.db,self.engine.checkpoint,self.temp.name)
+                p=self.plan(form=form,uploads={'resume':str(cv)},cv_artifact=artifact)
+                result=standing.execute_under_standing_authorization(self.engine,p['id'],adapter,policy,self.temp.name)
+            else:
+                p = self.approved(form=form, uploads={'resume': str(cv)},cv_artifact=artifact)
+                result = self.engine.execute(p['id'], adapter)
             self.assertEqual(result['status'], 'submitted')
             self.assertEqual(result['receipt']['confirmation_id'], 'FIXTURE-REAL-BROWSER-1')
             self.assertTrue(result['receipt']['fixture_only'])
@@ -294,6 +302,10 @@ class ExecutionTests(unittest.TestCase):
             self.assertIn(b'Fixture Candidate', received[0])
             self.assertTrue(self.engine.execute(p['id'], adapter)['replayed'])
             self.assertEqual(len(received), 1)
+            if os.environ.get('HUNT_FIXTURE_EVIDENCE_DIR'):
+                target=Path(os.environ['HUNT_FIXTURE_EVIDENCE_DIR']);target.mkdir(parents=True,exist_ok=True)
+                evidence={'test_only':True,'standing_authorization_fixture':standing_mode,'description':'Fresh reproduction of the controlled local-browser test, not a real employer application','receipt':result['receipt'],'observed_local_submissions':len(received),'duplicate_submission_prevented':True,'employer_submissions':0,'email_sent':False,'captured_at':dt.datetime.now(dt.timezone.utc).isoformat()}
+                (target/'local-test-receipt.json').write_text(json.dumps(evidence,indent=2))
         finally:
             adapter.close()
             server.shutdown()

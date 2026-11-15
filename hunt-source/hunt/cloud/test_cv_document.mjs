@@ -33,3 +33,11 @@ test('execution context is owner-only, binds job/package/document, and honors in
  assert.equal((await handle(new Request(url),env)).status,403);
  const r=await handle(new Request(url,{headers:{'oai-authenticated-user-id':'owner'}}),env);assert.equal(r.status,200);const context=await r.json();assert.equal(context.paused,true);assert.equal(context.job.id,job.id);assert.equal(context.cv_artifact.package_hash,pkg.payload_hash);assert.equal(context.package.master_cv_current,false);assert.equal(context.resume_full,undefined);assert.equal(context.cv_artifact.bytes,undefined);
 });
+test('autonomous candidates respect priority, provider, original date, hidden employers and pause',async()=>{
+ const b=new Bucket(),job={id:'lever-fixture',company:'Fixture',title:'People Operations Specialist',raw_hash:'v1',open:true,remote:true,location:'Remote worldwide',description:'Own recruitment workflows. Full-time. USD 3000 per month.',url:'https://jobs.lever.co/fixture/11111111-1111-1111-1111-111111111111',verified:new Date().toISOString(),published:new Date().toISOString(),publication_verified_original:true};
+ await b.put('hunt/owner.json','{"id":"owner"}');await b.put('hunt/snapshot.json',JSON.stringify({snapshot:{paused:false,jobs:[job],packages:[],applications:[],facts:[{id:'recruitment',text:'Verified recruitment workflows'}],sources:[],events:[]}}));
+ const env={BUCKET:b,HUNT_PUBLIC_READ:'true'},request=()=>handle(new Request('https://hunt.example/api/application-candidates',{headers:{'oai-authenticated-user-id':'owner'}}),env);
+ let result=await(await request()).json();assert.equal(result.candidates.length,1);assert.equal(result.candidates[0].job_version,'v1');
+ await b.put('hunt/preferences/job-visibility.json',JSON.stringify({hidden_jobs:[],hidden_employers:[{key:'fixture'}]}));assert.equal((await(await request()).json()).candidates.length,0);
+ await b.put('hunt/preferences/job-visibility.json',JSON.stringify({hidden_jobs:[],hidden_employers:[]}));await b.put('hunt/control.json','{"paused":true}');assert.equal((await(await request()).json()).candidates.length,0);
+});

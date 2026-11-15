@@ -11,6 +11,7 @@ import json
 import os
 import re
 import selectors
+import secrets
 import shutil
 import sqlite3
 import subprocess
@@ -43,9 +44,12 @@ class HUNTConnection:
         self.owner_key=owner_key
         self.root=Path(root)
 
-    def request(self,path,binary=False):
-        if not path.startswith(('/api/application-context?','/api/cv-artifact?')):raise ValueError('Runner read path denied')
-        req=Request(BASE+path,headers={'X-HUNT-Owner-Key':self.owner_key,'Cache-Control':'no-cache'})
+    def request(self,path,binary=False,body=None):
+        if not path.startswith(('/api/application-context?','/api/cv-artifact?','/api/application-candidates','/api/application-runner-status','/api/package','/api/application-receipt')):raise ValueError('Runner read path denied')
+        headers={'X-HUNT-Owner-Key':self.owner_key,'Cache-Control':'no-cache'}
+        if body is not None:
+            token=secrets.token_hex(32);headers.update({'Origin':BASE,'Cookie':'__Host-hunt_csrf='+token,'X-CSRF-Token':token,'Content-Type':'application/json'})
+        req=Request(BASE+path,headers=headers,data=json.dumps(body).encode() if body is not None else None)
         with build_opener(NoRedirect).open(req,timeout=25) as response:
             data=response.read(10*1024*1024+1)
         if len(data)>10*1024*1024:raise ValueError('Runner response exceeds read bound')
@@ -79,6 +83,8 @@ def validate_context(context,payload):
     if not j.get('open') or j.get('hidden'):raise ValueError('Role is closed or hidden')
     if j['id']!=payload['job_id'] or j['raw_hash']!=payload['job_version'] or p['id']!=payload['package_id'] or p['payload_hash']!=payload['package_hash'] or p['job_version']!=j['raw_hash']:raise ValueError('Job or reviewed package version changed')
     if p.get('status') in ('superseded','rejected','requires_revision') or not p.get('writing_profile_current') or not p.get('master_cv_current'):raise ValueError('Current reviewed CV wording and source are required')
+    if a.get('score',0)<85:raise ValueError('Role has not reached the priority fit threshold')
+    if not j.get('publication_verified_original'):raise ValueError('Verify the employer-original posting date before automatic application')
     if not j.get('within_discovery_window') or not j.get('global_remote') or a.get('tier') not in ('A','B') or a.get('role_relevant') is False:raise ValueError('Resolve current 48-hour freshness and Nigeria remote eligibility first')
     pay=a.get('compensation',{})
     if pay.get('status')!='meets_floor' or not isinstance(pay.get('monthly_min'),(int,float)) or pay['monthly_min']<2500:raise ValueError('Resolve the verified USD 2500 monthly salary gate first')

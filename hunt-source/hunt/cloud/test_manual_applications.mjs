@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {webcrypto} from 'node:crypto';
 import {readFileSync} from 'node:fs';
-import {recordApplied,manualApplications,syncTracker,connectTracker,TRACKER_ID} from './applications.mjs';
+import {recordApplied,manualApplications,syncTracker,connectTracker,recordConfirmedApplication,TRACKER_ID} from './applications.mjs';
 globalThis.crypto??=webcrypto;globalThis.WRITING_PROFILE=JSON.parse(readFileSync(new URL('../writing-profile.json',import.meta.url)));globalThis.DRAFTING_INSTRUCTIONS='';globalThis.ASSETS={};
 const {handle}=await import('./server.mjs');
 class Bucket{data=new Map();n=0;async get(k){const v=this.data.get(k);return v?{etag:v.etag,json:async()=>JSON.parse(v.data)}:null}async put(k,data,o={}){const old=this.data.get(k);if(o.onlyIf?.etagDoesNotMatch==='*'&&old||o.onlyIf?.etagMatches&&old?.etag!==o.onlyIf.etagMatches)return null;const etag=String(++this.n);this.data.set(k,{etag,data});return {etag}}async delete(k){this.data.delete(k)}async list({prefix}){return {objects:[...this.data.keys()].filter(k=>k.startsWith(prefix)).map(key=>({key}))}}}
@@ -14,7 +14,7 @@ const grant={account:'majekadegbeaminat85@gmail.com',scopes:['openid','email','h
 function provider({commitThenThrow=false,throwBeforeCommit=false}={}){
  const rows=[headers,['1','Existing Employer','Earlier job','2026-10-01','','Application reported','','Monitor','','Preserve this note']],batches=[];
  const template=Array.from({length:10},()=>({userEnteredFormat:{textFormat:{fontFamily:'Arial',link:{uri:'https://old-row.test'}}}}));
- template[5].dataValidation={condition:{type:'ONE_OF_LIST',values:[{userEnteredValue:'Application reported'},{userEnteredValue:'Rejected'}]},strict:true};template[7].dataValidation={condition:{type:'ONE_OF_LIST',values:[{userEnteredValue:'Monitor'}]},strict:true};
+ template[5].dataValidation={condition:{type:'ONE_OF_LIST',values:[{userEnteredValue:'Application reported'},{userEnteredValue:'Application acknowledged'},{userEnteredValue:'Rejected'}]},strict:true};template[7].dataValidation={condition:{type:'ONE_OF_LIST',values:[{userEnteredValue:'Monitor'}]},strict:true};
  const fetcher=async(url,opts={})=>{const u=String(url);if(u.endsWith('/token'))return Response.json({access_token:'fixture-access'});if(u.includes('/userinfo'))return Response.json({email:grant.account,email_verified:true});
   assert.ok(u.startsWith('https://sheets.googleapis.com/v4/spreadsheets/'+TRACKER_ID),'Only the authorized tracker can be accessed');
   if(u.includes('/values/'))return Response.json({values:rows});
@@ -56,4 +56,11 @@ test('undo clears only the exact HUNT-created Sheet row, preserving existing his
  await recordApplied(b,{job_id:job.id,applied:false},snapshot);
  let cleared=0;const fetcher=async(url,opts)=>{if(String(url).endsWith(':clear')){assert.match(decodeURIComponent(String(url)),/A3:J3:clear$/);p.rows[2]=[];cleared++;return Response.json({});}return p.fetcher(url,opts)};
  assert.equal((await syncTracker(b,r.application.id,fetcher)).status,'removed');assert.equal(cleared,1);assert.equal(p.rows[1][9],'Preserve this note');
+});
+
+test('real-form receipt is distinct from an email; fixtures cannot enter the real tracker',async()=>{
+ const b=new Bucket(),p=provider();await connectTracker(b,grant,p.fetcher);const pack={id:'p',job_id:job.id,payload_hash:'h'};const input={job_id:job.id,package_id:'p',package_hash:'h',cv_sha256:'a'.repeat(64),receipt:{submitted:true,confirmation_id:'lever-confirmation',evidence_kind:'confirmation_page',evidence_url:job.url+'/thanks',confirmation_text:'Your application has been submitted'}};
+ await assert.rejects(recordConfirmedApplication(b,{...input,receipt:{...input.receipt,fixture_only:true}},{...snapshot,packages:[pack]},p.fetcher),/production employer/);assert.equal((await manualApplications(b)).length,0);
+ const result=await recordConfirmedApplication(b,input,{...snapshot,packages:[pack]},p.fetcher);assert.equal(result.application.employer_form_submitted_by_hunt,true);assert.equal(result.application.submission_receipt.email_verified,false);assert.equal(result.tracker_sync.status,'synced');assert.equal(p.rows[2][5],'Application acknowledged');assert.match(p.rows[2][6],/no email verified/);
+ await recordConfirmedApplication(b,input,{...snapshot,packages:[pack]},p.fetcher);assert.equal(p.batches.length,1);
 });
