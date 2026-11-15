@@ -22,7 +22,9 @@ export function requestAllowed(target,method,stage,origin,resourceType){
   if(['GET','HEAD'].includes(method))return u.origin===origin||resourceType!=='document';
   // Inspection never discloses application answers. File parsing/uploads can
   // happen during an already approved fill, but only to the ATS itself.
-  return ['fill','submit'].includes(stage)&&['POST','PUT'].includes(method)&&[...LEVER_HOSTS,'uploads.lever.co','api.lever.co','api.eu.lever.co'].includes(u.hostname);
+  if(!['POST','PUT'].includes(method))return false;
+  if(stage==='fill')return u.hostname==='uploads.lever.co'||(u.origin===origin&&/\/(?:parseResume|resume|upload)(?:\/|$)/i.test(u.pathname));
+  return stage==='submit'&&[...LEVER_HOSTS,'uploads.lever.co','api.lever.co','api.eu.lever.co'].includes(u.hostname);
 }
 export function confirmationEvidence({text,url,applicationURL,idempotencyKey}){
   const target=employerURL(applicationURL),u=new URL(url);
@@ -30,36 +32,12 @@ export function confirmationEvidence({text,url,applicationURL,idempotencyKey}){
   return {submitted:true,confirmation_id:'lever-dom-'+createHash('sha256').update(applicationURL+'\n'+idempotencyKey+'\n'+text).digest('hex').slice(0,32),evidence_kind:'confirmation_page',evidence_url:u.href,confirmation_text:text.slice(0,2000),provider_reference:null,confirmation_basis:'Observed employer confirmation text; no ATS reference number was exposed.'};
 }
 
-async function main(){
- const initial=employerURL(process.argv[2]);
- const evidenceDir=path.resolve(process.argv[3]||'data/application-evidence');
- await mkdir(evidenceDir,{recursive:true,mode:0o700});await chmod(evidenceDir,0o700);
- let pw;
- if(process.env.HUNT_PLAYWRIGHT_MODULE)pw=await import(pathToFileURL(path.resolve(process.env.HUNT_PLAYWRIGHT_MODULE)).href);
- else try{pw=await import('playwright')}catch{throw new Error('Install Playwright and its Chromium browser, or set HUNT_PLAYWRIGHT_MODULE to the installed Playwright index.mjs')}
- const browser=await pw.chromium.launch({headless:true,...(process.env.HUNT_CHROME_EXECUTABLE?{executablePath:process.env.HUNT_CHROME_EXECUTABLE}:{}),args:['--disable-background-networking','--disable-component-update']});
- const context=await browser.newContext({serviceWorkers:'block',acceptDownloads:false});
- let stage='inspect',loaded=false,observedForm=null;
- await context.route('**/*',route=>requestAllowed(route.request().url(),route.request().method(),stage,initial.origin,route.request().resourceType())?route.continue():route.abort('blockedbyclient'));
- const page=await context.newPage();page.setDefaultTimeout(12000);
- async function saveEvidence(prefix,ident){const safe=String(ident||'inspection').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,80)||'inspection';const file=path.join(evidenceDir,prefix+'-'+safe+'.png');await page.screenshot({path:file,fullPage:true});await chmod(file,0o600);return file}
- async function inspect(){
-  stage='inspect';
-  if(!loaded){await page.goto(initial.href,{waitUntil:'domcontentloaded',timeout:30000});loaded=true}
-  const current=employerURL(page.url());if(current.origin!==initial.origin||current.pathname.replace(/\/apply\/?$/,'')!==initial.pathname.replace(/\/apply\/?$/,''))throw new Error('Employer navigation changed the selected job');
-  if(!/\/apply\/?$/.test(current.pathname)){
-   const apply=page.locator('a[href]').filter({hasText:/^Apply for this job$/i});
-   if(await apply.count()!==1)throw new Error('A unique employer application link is not available');
-   const href=new URL(await apply.getAttribute('href'),page.url());employerURL(href.href);
-   if(href.origin!==initial.origin||href.pathname.replace(/\/apply\/?$/,'')!==initial.pathname.replace(/\/apply\/?$/,''))throw new Error('Application link points to a different job');
-   await apply.click();await page.waitForLoadState('domcontentloaded');
-  }
-  observedForm=await page.evaluate(()=>{
+export function inspectLeverDocument(){
    const forms=[...document.querySelectorAll('form')].filter(f=>f.querySelector('input[type="file"]')&&f.querySelector('input[name="email"]'));
    if(forms.length!==1)throw new Error('A unique Lever application form could not be inspected');
    const form=forms[0];
    const visible=e=>!!(e.getClientRects().length)&&getComputedStyle(e).visibility!=='hidden';
-   const controls=[...form.querySelectorAll('input,textarea,select')].filter(e=>!['hidden','submit','button','reset'].includes(e.type)&&visible(e));
+   const controls=[...form.querySelectorAll('input,textarea,select')].filter(e=>!['hidden','submit','button','reset'].includes(e.type)&&(visible(e)||e.type==='file'));
    const counts=new Map();for(const e of controls)counts.set(e.name,(counts.get(e.name)||0)+1);
    const seen=new Set(),questions=[];
    for(const e of controls){
@@ -84,8 +62,34 @@ async function main(){
    const challenge=[...document.querySelectorAll('iframe[src*="recaptcha"],iframe[src*="hcaptcha"],iframe[src*="challenges.cloudflare.com"],.g-recaptcha,.h-captcha')].some(visible);
    const securityFailure=/(?:security check (?:did not|failed to) load|verify you are human|complete the captcha|access denied)/i.test(form.innerText);
    return {url:location.href,action_url:form.action||location.href,questions,captcha:challenge||securityFailure,platform_restriction:false,provider:'lever',submit_label:(submit[0].innerText||submit[0].value||'Submit').trim()};
-  });
-  const action=new URL(observedForm.action_url);if(action.protocol!=='https:'||!LEVER_HOSTS.has(action.hostname))throw new Error('Form action is outside the selected ATS');
+}
+
+async function main(){
+ const initial=employerURL(process.argv[2]);
+ const evidenceDir=path.resolve(process.argv[3]||'data/application-evidence');
+ await mkdir(evidenceDir,{recursive:true,mode:0o700});await chmod(evidenceDir,0o700);
+ let pw;
+ if(process.env.HUNT_PLAYWRIGHT_MODULE)pw=await import(pathToFileURL(path.resolve(process.env.HUNT_PLAYWRIGHT_MODULE)).href);
+ else try{pw=await import('playwright')}catch{throw new Error('Install Playwright and its Chromium browser, or set HUNT_PLAYWRIGHT_MODULE to the installed Playwright index.mjs')}
+ const browser=await pw.chromium.launch({headless:true,...(process.env.HUNT_CHROME_EXECUTABLE?{executablePath:process.env.HUNT_CHROME_EXECUTABLE}:{}),args:['--disable-background-networking','--disable-component-update']});
+ const context=await browser.newContext({serviceWorkers:'block',acceptDownloads:false});
+ let stage='inspect',loaded=false,observedForm=null;
+ await context.route('**/*',route=>requestAllowed(route.request().url(),route.request().method(),stage,initial.origin,route.request().resourceType())?route.continue():route.abort('blockedbyclient'));
+ const page=await context.newPage();page.setDefaultTimeout(12000);
+ async function saveEvidence(prefix,ident){const safe=String(ident||'inspection').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,80)||'inspection';const file=path.join(evidenceDir,prefix+'-'+safe+'.png');await page.screenshot({path:file,fullPage:true,timeout:3000});await chmod(file,0o600);return file}
+ async function inspect(){
+  stage='inspect';
+  if(!loaded){await page.goto(initial.href,{waitUntil:'commit',timeout:30000});await page.locator('input[name="email"],a[href$="/apply"]').first().waitFor({state:'attached',timeout:15000});loaded=true}
+  const current=employerURL(page.url());if(current.origin!==initial.origin||current.pathname.replace(/\/apply\/?$/,'')!==initial.pathname.replace(/\/apply\/?$/,''))throw new Error('Employer navigation changed the selected job');
+  if(!/\/apply\/?$/.test(current.pathname)){
+   const apply=page.locator('a[href]').filter({hasText:/^Apply for this job$/i});
+   if(await apply.count()!==1)throw new Error('A unique employer application link is not available');
+   const href=new URL(await apply.getAttribute('href'),page.url());employerURL(href.href);
+   if(href.origin!==initial.origin||href.pathname.replace(/\/apply\/?$/,'')!==initial.pathname.replace(/\/apply\/?$/,''))throw new Error('Application link points to a different job');
+   await apply.click();await page.waitForLoadState('domcontentloaded');
+  }
+  observedForm=await page.evaluate(inspectLeverDocument);
+  const action=new URL(observedForm.action_url);if(action.protocol!=='https:'||action.origin!==initial.origin)throw new Error('Form action is outside the selected ATS');
   await saveEvidence('inspected',createHash('sha256').update(observedForm.url).digest('hex').slice(0,20));
   return observedForm;
  }
@@ -93,10 +97,14 @@ async function main(){
  async function fill(payload){
   if(!observedForm||payload.form.url!==observedForm.url||payload.form.provider!=='lever')throw new Error('Inspect this exact employer form before filling');
   stage='fill';
-  for(const f of payload.form.questions){const loc=control(f.id);const answer=payload.answers[f.id];if(f.type==='file'){const upload=payload.uploads[f.id];if(upload)await loc.setInputFiles(upload.path)}else if(answer){if(f.type==='select')await loc.selectOption(answer.value);else if(f.type==='radio')await loc.filter({visible:true}).locator('xpath=.',{}).count()&&await page.locator('[name='+JSON.stringify(f.id.slice(5))+'][value='+JSON.stringify(answer.value)+']').check();else if(f.type==='checkbox')await loc.setChecked(answer.value);else await loc.fill(answer.value)}}
+  for(const f of payload.form.questions){const loc=control(f.id);const answer=payload.answers[f.id];if(f.type==='file'){const upload=payload.uploads[f.id];if(upload)await loc.setInputFiles(upload.path)}else if(answer){if(f.type==='select')await loc.selectOption(answer.value);else if(f.type==='radio')await page.locator('[name='+JSON.stringify(f.id.slice(5))+'][value='+JSON.stringify(answer.value)+']').check();else if(f.type==='checkbox')await loc.setChecked(answer.value);else await loc.fill(answer.value)}}
+  const preview=await readPreview(payload);
+  await saveEvidence('filled',payload.package_hash);return preview;
+ }
+ async function readPreview(payload){
   const answers={};for(const [id,a] of Object.entries(payload.answers)){const loc=control(id);const field=payload.form.questions.find(f=>f.id===id);answers[id]=field.type==='radio'?await page.locator('[name='+JSON.stringify(id.slice(5))+']:checked').inputValue():typeof a.value==='boolean'?await loc.isChecked():await loc.inputValue()}
   const uploads={};for(const [id,file] of Object.entries(payload.uploads))uploads[id]=await control(id).evaluate(async e=>{if(!e.files?.length)return null;return [...new Uint8Array(await crypto.subtle.digest('SHA-256',await e.files[0].arrayBuffer()))].map(x=>x.toString(16).padStart(2,'0')).join('')});
-  await saveEvidence('filled',payload.package_hash);return {answers,uploads};
+  return {answers,uploads};
  }
  async function submit(payload,ident){
   if(stage!=='fill')throw new Error('A filled and verified exact plan is required');
@@ -104,13 +112,17 @@ async function main(){
   const button=form.locator('button[type="submit"],input[type="submit"]');
   if(await button.count()!==1||!await button.isEnabled())throw new Error('Employer submit control is unavailable or security-blocked');
   if(await page.locator('iframe[src*="recaptcha"],iframe[src*="hcaptcha"],iframe[src*="challenges.cloudflare.com"]').filter({visible:true}).count())throw new Error('Employer security challenge requires owner interaction');
+  const expected={answers:Object.fromEntries(Object.entries(payload.answers).map(([id,a])=>[id,a.value])),uploads:Object.fromEntries(Object.entries(payload.uploads).map(([id,u])=>[id,u.sha256]))};
+  if(JSON.stringify(await readPreview(payload))!==JSON.stringify(expected))throw new Error('Filled form changed after review; submission blocked');
+  const beforeURL=page.url();
   stage='submit';await saveEvidence('before-submit',ident);await button.click();
   const positive=page.getByText(/(?:your application (?:has been|was) (?:successfully )?(?:submitted|received)|application submitted|thanks for applying|thank you for applying)/i).first();await positive.waitFor({state:'visible',timeout:20000});
+  if(page.url()===beforeURL&&await form.isVisible())throw new Error('Form remains visible; employer confirmation is not sufficiently distinct');
   const text=await positive.innerText();const result=confirmationEvidence({text,url:page.url(),applicationURL:payload.application_url,idempotencyKey:ident});
   if(!result)throw new Error('No positive employer confirmation was observed');
   result.screenshot=await saveEvidence('submitted',ident);return result;
  }
  const lines=readline.createInterface({input:process.stdin,crlfDelay:Infinity});
- try{for await(const line of lines){try{const r=JSON.parse(line);if(r.command==='close')break;const result=r.command==='inspect'?await inspect():r.command==='fill'?await fill(r.payload):r.command==='submit'?await submit(r.payload,r.idempotency_key):(()=>{throw new Error('Unsupported browser command')})();process.stdout.write(JSON.stringify({ok:true,result})+'\n')}catch(error){process.stdout.write(JSON.stringify({ok:false,error_type:error.name,error:String(error.message).slice(0,300)})+'\n')}}}finally{await browser.close()}
+ try{for await(const line of lines){try{const r=JSON.parse(line);if(r.command==='close')break;const result=r.command==='inspect'?await inspect():r.command==='fill'?await fill(r.payload):r.command==='submit'?await submit(r.payload,r.idempotency_key):(()=>{throw new Error('Unsupported browser command')})();process.stdout.write(JSON.stringify({ok:true,result})+'\n')}catch(error){if(stage==='inspect')try{await saveEvidence('inspection-failed','current')}catch{}process.stdout.write(JSON.stringify({ok:false,error_type:error.name,error:String(error.message).slice(0,300)})+'\n')}}}finally{await browser.close()}
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(process.argv[1])).href)main().catch(error=>{process.stderr.write('HUNT browser runtime unavailable: '+error.message+'\n');process.exitCode=1});

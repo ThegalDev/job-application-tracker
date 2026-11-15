@@ -1,7 +1,12 @@
 {
   "source_folder": "/Users/theoneglobal/Documents/Codex/2026-11-12/referenced-chatgpt-conversation-this-is-an/outputs/hunt",
-  "file_count": 68,
+  "file_count": 73,
   "files": [
+    {
+      "path": "hunt/APPLICATION-RUNNER-SETUP.md",
+      "bytes": 3639,
+      "sha256": "c8430fe176f98d13435c25961eac5c11902f944e731ef223c4d1df996fa7ff05"
+    },
     {
       "path": "hunt/CONNECTOR-BRIDGE.md",
       "bytes": 2781,
@@ -24,8 +29,13 @@
     },
     {
       "path": "hunt/application_execution.py",
-      "bytes": 18624,
-      "sha256": "87a1a1f45d35ae304dc864adb19a1ad605835838dd83fc8fbf8d4e8b7cefc5c7"
+      "bytes": 19388,
+      "sha256": "316d7bf39057698429898d9f155c8bf3d9761bf67e60bd99ed6eb73a405bae92"
+    },
+    {
+      "path": "hunt/application_runner.py",
+      "bytes": 11506,
+      "sha256": "eef3028562cebb71515c559ed2a5ec36e914f0d81f8f3e4b0d03e160475283a5"
     },
     {
       "path": "hunt/cloud/.gitignore",
@@ -69,8 +79,8 @@
     },
     {
       "path": "hunt/cloud/server.mjs",
-      "bytes": 107778,
-      "sha256": "26ed1a8bf9b7647dfb3b3b43478bef8867a635ae6a3cb67fd216e9f3a7705034"
+      "bytes": 109060,
+      "sha256": "d7e0ae8e4f0232353335f81aa1ed4c2ed09b0da0a88919321f65af7b169889d2"
     },
     {
       "path": "hunt/cloud/test_action_controls.mjs",
@@ -89,8 +99,8 @@
     },
     {
       "path": "hunt/cloud/test_cv_document.mjs",
-      "bytes": 3826,
-      "sha256": "0d7bbc7671e8da1fe04bd1d28d5e8e4f471a974e9dd4d142e76fe0b068ece38a"
+      "bytes": 5194,
+      "sha256": "414f622fe0c7377973d72a9347682248ae3183fd994be7ce5ea18d5b164db4a0"
     },
     {
       "path": "hunt/cloud/test_discovery_expansion.mjs",
@@ -194,8 +204,8 @@
     },
     {
       "path": "hunt/employer_browser.mjs",
-      "bytes": 12148,
-      "sha256": "a9ffce0fc2bf36ef47b9f14e5c2859033c781c86fdf2cf84b624ad036202bf0b"
+      "bytes": 13116,
+      "sha256": "b5391068608de28fe5173c04fede7d61ab0100efdbc06e322fe75620b29e249a"
     },
     {
       "path": "hunt/google_provider.py",
@@ -264,8 +274,13 @@
     },
     {
       "path": "hunt/test_application_execution.py",
-      "bytes": 14085,
-      "sha256": "806ac56e836063e0d8c01f99b11205008c6d1ec8a8763ca2d8363a6de71b11a2"
+      "bytes": 14695,
+      "sha256": "f83d3950f34813fae27cf719da8fbcd0e215acb1295309f5f0814520a519068f"
+    },
+    {
+      "path": "hunt/test_application_runner.py",
+      "bytes": 4749,
+      "sha256": "3301e87e1e4f1e8909cc1fe08411357364387069d6ef43429f590bea720cde53"
     },
     {
       "path": "hunt/test_drafting_acceptance.py",
@@ -281,6 +296,16 @@
       "path": "hunt/test_email_pipeline.py",
       "bytes": 11321,
       "sha256": "16e5ddd6ecadee26b416a09fb7bf542e4a85d54e077f1473f2fd6eaf23b2c13c"
+    },
+    {
+      "path": "hunt/test_employer_browser.mjs",
+      "bytes": 1618,
+      "sha256": "bdaecf05bb32077d70e4df2edfc755bff68b4606b90d1c0a59e260984ec747f6"
+    },
+    {
+      "path": "hunt/test_employer_dom.mjs",
+      "bytes": 2144,
+      "sha256": "29105aa2e9f50f58fb7d3bfbaf702b430ba5fb49b1b24e4f32ba97d823195fd4"
     },
     {
       "path": "hunt/test_http.py",

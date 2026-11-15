@@ -1,5 +1,6 @@
 """State-machine fixtures only: no browser, employer or network is exercised."""
 import contextlib
+import hashlib
 import copy
 import datetime as dt
 import json
@@ -171,7 +172,8 @@ class ExecutionTests(unittest.TestCase):
         cv.write_bytes(b'%PDF-fixture-version-one')
         form = copy.deepcopy(self.form)
         form['questions'].append({'id': 'resume', 'label': 'Resume', 'type': 'file', 'required': True})
-        p = self.approved(form=form, uploads={'resume': str(cv)})
+        artifact={'package_id':'package-one','package_hash':'package-v1','sha256':hashlib.sha256(cv.read_bytes()).hexdigest(),'filename':'cv.pdf','document_version':'fixture'}
+        p = self.approved(form=form, uploads={'resume': str(cv)},cv_artifact=artifact)
         cv.write_bytes(b'%PDF-fixture-replaced')
         adapter = FixtureAdapter()
         with self.assertRaisesRegex(ValueError, 'file changed'):
@@ -238,7 +240,8 @@ class ExecutionTests(unittest.TestCase):
         cv.write_bytes(b'%PDF-fixture-one')
         form = copy.deepcopy(self.form)
         form['questions'].append({'id': 'resume', 'label': 'Resume', 'type': 'file', 'required': True})
-        p = self.approved(form=form, uploads={'resume': str(cv)})
+        artifact={'package_id':'package-one','package_hash':'package-v1','sha256':hashlib.sha256(cv.read_bytes()).hexdigest(),'filename':'cv.pdf','document_version':'fixture'}
+        p = self.approved(form=form, uploads={'resume': str(cv)},cv_artifact=artifact)
         adapter = FixtureAdapter()
         adapter.on_fill = lambda: cv.write_bytes(b'%PDF-fixture-changed-during-fill')
         self.assertEqual(self.engine.execute(p['id'], adapter)['status'], 'needs_review')
@@ -280,7 +283,8 @@ class ExecutionTests(unittest.TestCase):
             self.assertEqual(form['questions'][1]['type'], 'select')
             cv = Path(self.temp.name) / 'cv.pdf'
             cv.write_bytes(b'%PDF-local-fixture-upload-verified')
-            p = self.approved(form=form, uploads={'resume': str(cv)})
+            artifact={'package_id':'package-one','package_hash':'package-v1','sha256':hashlib.sha256(cv.read_bytes()).hexdigest(),'filename':'cv.pdf','document_version':'fixture'}
+            p = self.approved(form=form, uploads={'resume': str(cv)},cv_artifact=artifact)
             result = self.engine.execute(p['id'], adapter)
             self.assertEqual(result['status'], 'submitted')
             self.assertEqual(result['receipt']['confirmation_id'], 'FIXTURE-REAL-BROWSER-1')

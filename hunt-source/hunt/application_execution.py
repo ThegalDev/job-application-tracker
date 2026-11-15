@@ -38,7 +38,10 @@ def browser_capability():
             'can_submit': False,
             'blockers': ['No production employer-form adapter is connected.'] +
                         ([] if available else ['The Python Playwright package is not installed.']),
-            'browser_binary_verified': False}
+            'browser_binary_verified': False,
+            'production_adapter_code_available': Path(__file__).with_name('application_runner.py').is_file(),
+            'supported_production_providers': ['lever'],
+            'execution_mode': 'desktop_exact_approval_not_enabled'}
 
 
 def https_url(value):
@@ -160,19 +163,23 @@ class ApplicationExecution:
             result['receipt'] = json.loads(result['receipt']) if result['receipt'] else None
             return result
 
-    def plan(self, *, job_id, job_version, package_id, package_hash, form, answers, uploads=None):
+    def plan(self, *, job_id, job_version, package_id, package_hash, form, answers, uploads=None, cv_artifact=None):
         if not all(isinstance(v, str) and v for v in (job_id, job_version, package_id, package_hash)):
             raise ValueError('Exact job and package identities and versions are required')
         if not isinstance(answers, dict) or not isinstance(uploads or {}, dict):
             raise ValueError('Explicit question answers and file mappings are required')
         version = form_version(form)
         files = {k: upload_record(k, v) for k, v in (uploads or {}).items()}
+        if cv_artifact is not None:
+            if not isinstance(cv_artifact,dict) or cv_artifact.get('package_id')!=package_id or cv_artifact.get('package_hash')!=package_hash or not any(file['sha256']==cv_artifact.get('sha256') for file in files.values()):
+                raise ValueError('Attach the exact reviewed CV for this package version')
         issues = unresolved_questions(form, answers, files)
         blocked = bool(form.get('captcha') or form.get('platform_restriction'))
         payload = {'kind': 'application', 'job_id': job_id, 'job_version': job_version,
                    'package_id': package_id, 'package_hash': package_hash, 'application_url': form['url'],
                    'form': form, 'form_version': version, 'answers': answers, 'uploads': files,
                    'unresolved_questions': issues}
+        if cv_artifact is not None:payload['cv_artifact']={key:cv_artifact[key] for key in ('package_id','package_hash','sha256','filename','document_version')}
         digest = fingerprint(payload)
         ident = digest[:32]
         status = 'blocked' if blocked else 'needs_input' if issues else 'review'

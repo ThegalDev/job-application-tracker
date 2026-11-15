@@ -26,3 +26,10 @@ test('owner download returns exact verified document; anonymous and stale versio
  const r=await handle(new Request(path,{headers}),env);assert.equal(r.status,200);assert.match(r.headers.get('Content-Type'),/wordprocessingml/);const bytes=new Uint8Array(await r.arrayBuffer());assert.deepEqual(bytes,(await cvArtifact(pkg)).bytes);assert.equal(createHash('sha256').update(bytes).digest('hex'),r.headers.get('X-HUNT-Artifact-SHA256'));
  const meta=await (await handle(new Request(path+'&metadata=1',{headers}),env)).json();assert.equal(meta.sha256,r.headers.get('X-HUNT-Artifact-SHA256'));assert.equal(meta.bytes,undefined);
 });
+test('execution context is owner-only, binds job/package/document, and honors inherited pause',async()=>{
+ const b=new Bucket(),job={id:'fixture-job',company:'Fixture',title:'People Operations Specialist',raw_hash:'v1',open:true,remote:true,location:'Remote worldwide',description:'Own recruitment workflows. USD 3000 per month.',url:'https://jobs.lever.co/fixture/11111111-1111-1111-1111-111111111111',verified:new Date().toISOString()};
+ await b.put('hunt/owner.json','{"id":"owner"}');await b.put('hunt/snapshot.json',JSON.stringify({snapshot:{paused:true,jobs:[job],packages:[],applications:[],facts:[],sources:[],events:[]}}));await b.put('hunt/runtime/packages.json',JSON.stringify([{...pkg,job_id:job.id,job_version:'v1'}]));
+ const env={BUCKET:b,HUNT_PUBLIC_READ:'true'},url='https://hunt.example/api/application-context?job_id=fixture-job&package_id='+pkg.id;
+ assert.equal((await handle(new Request(url),env)).status,403);
+ const r=await handle(new Request(url,{headers:{'oai-authenticated-user-id':'owner'}}),env);assert.equal(r.status,200);const context=await r.json();assert.equal(context.paused,true);assert.equal(context.job.id,job.id);assert.equal(context.cv_artifact.package_hash,pkg.payload_hash);assert.equal(context.package.master_cv_current,false);assert.equal(context.resume_full,undefined);assert.equal(context.cv_artifact.bytes,undefined);
+});
