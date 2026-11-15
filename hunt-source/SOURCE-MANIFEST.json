@@ -1,6 +1,6 @@
 {
   "source_folder": "/Users/theoneglobal/Documents/Codex/2026-11-12/referenced-chatgpt-conversation-this-is-an/outputs/hunt",
-  "file_count": 59,
+  "file_count": 60,
   "files": [
     {
       "path": "hunt/CONNECTOR-BRIDGE.md",
@@ -44,8 +44,8 @@
     },
     {
       "path": "hunt/cloud/netlify/discovery-tasks.mjs",
-      "bytes": 2185,
-      "sha256": "e30fbffcd2c5a644d69d634ec3ae894b612a91f71d48950d7976d28ff92ec572"
+      "bytes": 3732,
+      "sha256": "50fd7f8a9d4aea3cb376d988678bf5b33f98ecdc333cacbd7c45886b8d876e5b"
     },
     {
       "path": "hunt/cloud/notifications.mjs",
@@ -59,8 +59,8 @@
     },
     {
       "path": "hunt/cloud/server.mjs",
-      "bytes": 100216,
-      "sha256": "98114ca453e2987314d340658a9a9a2245b189059d43cdd350734553bccf9dec"
+      "bytes": 104185,
+      "sha256": "9c4a5a2992f022c7b18accdac1d2a5293993f6592f9766cd0e55a0bcf1c94d57"
     },
     {
       "path": "hunt/cloud/test_action_controls.mjs",
@@ -91,6 +91,11 @@
       "path": "hunt/cloud/test_lead_visibility.mjs",
       "bytes": 1497,
       "sha256": "0f2eea5f5a0877785a09093eb137bb8073462d0d222783b4df4e82404cdc852b"
+    },
+    {
+      "path": "hunt/cloud/test_live_progress.mjs",
+      "bytes": 4315,
+      "sha256": "9c4f109f9d788940eaf9fabc186f84aca8de7818b769ef6a059bef5ad60bd604"
     },
     {
       "path": "hunt/cloud/test_notifications.mjs",
@@ -279,18 +284,18 @@
     },
     {
       "path": "hunt/web/app.js",
-      "bytes": 38482,
-      "sha256": "acb02132e335c9b7e75cdb2b6b1a946f8492bfc0e8973cf1b4df2826b85f6913"
+      "bytes": 42827,
+      "sha256": "91b0072e73452b5e656b23a3fb7d4fdf356160992e3c2db55cdbb78f9ff95691"
     },
     {
       "path": "hunt/web/index.html",
-      "bytes": 1743,
-      "sha256": "a7446278605245f9345cc4eb1e82d62c5120d8b316fe92e2a1b42765640eb500"
+      "bytes": 1824,
+      "sha256": "f42717d7ee17186253c131b2bec49615b8767a0503e507e8bac039e63e885eee"
     },
     {
       "path": "hunt/web/style.css",
-      "bytes": 8161,
-      "sha256": "29f3ac92e1e07a50dac0c048de82bd9be8e16dd6780e14504bc6e2db73a2cae1"
+      "bytes": 9120,
+      "sha256": "82996ef49dd1d023452a4a4787350ca66e82761cd7d1c7609d18724e8d6f42e2"
     },
     {
       "path": "hunt/writing-profile.json",

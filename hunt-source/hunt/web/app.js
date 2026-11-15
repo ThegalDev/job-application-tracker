@@ -29,13 +29,44 @@ async function api(path,body,retried=false){
   if(r.status===403&&data.code==='CSRF_TOKEN_MISMATCH'&&body&&!retried){await refresh();return api(path,body,true)}
   if(!r.ok)throw Error(data.error||data.message||'Request failed ('+r.status+')');return data;
 }
+function rememberDiscovery(id){try{if(id)localStorage.setItem('hunt.activeDiscoveryRun',id);else localStorage.removeItem('hunt.activeDiscoveryRun')}catch{}}
+function showDiscoveryProgress(task,transport='Live updates'){
+ const host=typeof document==='undefined'?null:document.querySelector('#run-progress');if(!host)return;
+ const p=task.progress||{},events=p.events||[],last=events.at(-1),terminal=['completed','failed','dispatch_uncertain'].includes(task.status);
+ const signature=task.id+':'+task.status+':'+(last?.seq||0)+':'+transport;if(host.dataset.signature===signature)return;host.dataset.signature=signature;
+ const labels={queued:'Starting',starting:'Starting',searching:'Searching',source_started:'Searching',source_completed:'Searching',source_failed:'Searching',source_skipped:'Searching',verifying_employer:'Checking employer evidence',collating:'Collating results',filtering:'Checking your criteria',saving:'Saving results',notifying:'Sending your summary',notification_sent:'Summary email sent',notification_failed:'Email needs attention',notification_blocked:'Email needs attention',notification_uncertain:'Email needs attention',done:'Done',failed:'Stopped'};
+ host.hidden=false;host.className='live-progress';
+ const warning=task.status==='failed'||task.result?.status==='partial',status=terminal?(warning?'Finished with issues':'Finished'):'Running';
+ host.innerHTML='<div class="live-progress-head"><div><div class="overline">Discovery activity</div><h2 class="live-stage">'+esc(labels[last?.phase]||'Starting')+'</h2></div>'+badge(status,warning?'warn':'')+'</div><p>'+esc(last?.message||'Your request is saved. Waiting for runner updates.')+'</p><div class="live-counters"><span>Sources processed: <strong>'+esc(p.completed_sources??0)+' / '+esc(p.total_sources??'…')+'</strong></span><span>Posting records observed: <strong>'+esc(p.records_observed??0)+'</strong></span></div>'+(p.total_sources?'<progress aria-label="Sources processed" value="'+esc(Math.min(p.completed_sources||0,p.total_sources))+'" max="'+esc(p.total_sources)+'"></progress>':'')+'<div class="live-connection">'+esc(terminal?'Saved run activity':transport)+'</div><ol class="live-events" role="log" aria-live="polite" aria-relevant="additions">'+events.map(e=>'<li data-level="'+(/failed|blocked|uncertain|skipped/.test(e.phase)?'warning':e.phase==='done'||e.phase==='notification_sent'?'success':'info')+'"><time>'+esc(new Date(e.at).toLocaleTimeString('en-NG',{timeZone:'Africa/Lagos',hour12:false}))+'</time><span>'+esc(e.message)+'</span></li>').join('')+'</ol>';
+ const log=host.querySelector('.live-events');if(log)log.scrollTop=log.scrollHeight;
+}
+function streamDiscovery(result){
+ if(typeof EventSource==='undefined')return Promise.resolve(null);
+ return new Promise((resolve,reject)=>{
+  const stream=new EventSource('/api/discovery-events?id='+encodeURIComponent(result.run_id));let settled=false;
+  const finish=(value,error)=>{if(settled)return;settled=true;stream.close();clearTimeout(timer);if(error)reject(error);else resolve(value)};
+  const timer=setTimeout(()=>finish(null),180000);
+  stream.addEventListener('progress',event=>{let task;try{task=JSON.parse(event.data)}catch{return finish(null)}showDiscoveryProgress(task);
+   if(task.status==='completed'){rememberDiscovery(null);finish({result:task.result})}
+   else if(['failed','dispatch_uncertain'].includes(task.status)){rememberDiscovery(null);finish(null,Error(task.message||'Discovery failed. Inspect the saved source results.'))}
+  });
+  stream.addEventListener('unavailable',()=>finish(null));stream.onerror=()=>finish(null);
+ });
+}
+async function resumeDiscoveryProgress(){
+ let id;try{id=localStorage.getItem('hunt.activeDiscoveryRun')}catch{return}if(!id||actionPending)return;
+ actionPending=true;setActionControls(true);
+ try{const result=await waitForDiscovery({background:true,run_id:id});await refresh();notify(operationMessage(result),result.status==='failed')}
+ catch(error){notify(error.message,true)}finally{actionPending=false;setActionControls(false)}
+}
 async function waitForDiscovery(result){
   if(!result?.background||!result.run_id)return result;
-  const deadline=Date.now()+180000;
-  while(Date.now()<deadline){const task=await api('discovery-task?id='+encodeURIComponent(result.run_id));
-    if(task.status==='completed')return task.result;
-    if(['failed','dispatch_uncertain'].includes(task.status))throw Error(task.message||'Discovery failed. Inspect the saved run in Activity.');
-    notify('Discovery is '+task.status+' in the cloud. Run '+result.run_id+'; you can close this tab and check back.');
+  const deadline=Date.now()+180000;rememberDiscovery(result.run_id);showDiscoveryProgress({id:result.run_id,status:result.status||'queued',progress:result.progress});
+  const streamed=await streamDiscovery(result);if(streamed)return streamed.result;
+  while(Date.now()<deadline){const task=await api('discovery-task?id='+encodeURIComponent(result.run_id));showDiscoveryProgress(task,'Checking saved live updates');
+    if(task.status==='completed'){rememberDiscovery(null);return task.result;}
+    if(['failed','dispatch_uncertain'].includes(task.status)){rememberDiscovery(null);throw Error(task.message||'Discovery failed. Inspect the saved run in Activity.');}
+    notify('Discovery is running. Follow the live activity below.');
     await new Promise(resolve=>setTimeout(resolve,2500));
   }
   return {status:'running',message:'Discovery continues in the cloud. Check Latest discovery and Activity for its saved result; completion is not yet confirmed.'};
@@ -110,6 +141,6 @@ function download(name,data){const blob=new Blob([data],{type:'application/json'
 function publicViewControls(){if(!state?.public_view)return;document.querySelectorAll('#discover,#run-full,#pause,[data-trigger],[data-report],[data-prepare],[data-excerpt],[data-approve],[data-reject],[data-edit-package],#save-revision').forEach(b=>{b.disabled=true;b.title='Owner-only control. Public visitors can view the live workspace.'});const tag=document.querySelector('.local-tag');if(tag)tag.textContent='● Public · live workspace';}
 function bind(){document.querySelectorAll('[data-edit-package]').forEach(b=>b.onclick=()=>editPackage(b.dataset.editPackage));document.querySelectorAll('[data-filter-view]').forEach(b=>b.onclick=()=>{view='opportunities';filter=b.dataset.filterView;query='';render()});document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{view=b.dataset.view;query='';render()});document.querySelectorAll('[data-job]').forEach(b=>b.onclick=()=>jobDetail(b.dataset.job));document.querySelectorAll('[data-package]').forEach(b=>b.onclick=()=>packageDetail(b.dataset.package));for(const [attr,useAI]of [['prepare',true],['excerpt',false]])document.querySelectorAll(`[data-${attr}]`).forEach(b=>b.onclick=()=>action(b,async()=>{const p=await api('package',{job_id:b.dataset[attr],use_ai:useAI});if(p.queued||p.status==='queued')return {...p,message:p.message||'This request is waiting for the connected runner. It has not completed.'};await refresh();await packageDetail(p.id);return {message:p.message||'Package prepared from verified facts. Review the source evidence and wording.'}}));for(const[attr,decision]of [['approve','approved_for_manual_action'],['reject','rejected']])document.querySelectorAll(`[data-${attr}]`).forEach(b=>b.onclick=()=>action(b,async()=>{const r=await api('review',{package_id:b.dataset[attr],decision});$('#detail').close();return r}));document.querySelectorAll('[data-download]').forEach(b=>b.onclick=()=>action(b,async()=>{const p=state.hosted?await api('package?id='+encodeURIComponent(b.dataset.download)):state.packages.find(p=>p.id===b.dataset.download);if(!p)throw Error('Package not found');download('HUNT-application-package.json',JSON.stringify(p,null,2));return {message:'Downloaded the complete reviewed package, including the full CV when available.'}}));if($('#discover'))$('#discover').onclick=e=>action(e.target,()=>api('run',{trigger:'discovery'}));if($('#run-full'))$('#run-full').onclick=e=>action(e.target,()=>api('run',{trigger:'full'}));document.querySelectorAll('[data-trigger]').forEach(b=>b.onclick=()=>action(b,()=>api('run',{trigger:b.dataset.trigger})));document.querySelectorAll('[data-report]').forEach(b=>b.onclick=()=>action(b,()=>api('report',{period:b.dataset.report})));document.querySelectorAll('[data-run-id]').forEach(b=>b.onclick=async()=>{try{const saved=(state.cloud_runs||[]).find(r=>r.id===b.dataset.runId);const r=saved?{...saved,tasks:[{role:'hosted_discovery_and_matching',status:saved.status,result:saved}]}:await api('workflow?id='+encodeURIComponent(b.dataset.runId));$('#detail-content').innerHTML='<h1>Agent workflow</h1><div class=note>'+esc(r.status)+'</div>'+r.tasks.map(t=>'<div class=detail-block><h3>'+esc(t.role.replaceAll('_',' '))+'</h3><p>'+esc(t.status)+'</p><pre>'+esc(JSON.stringify(t.result,null,2))+'</pre></div>').join('');$('#detail').showModal()}catch(e){notify(e.message,true)}});if($('#search'))$('#search').oninput=e=>{const pos=e.target.selectionStart;query=e.target.value;render();$('#search').focus();$('#search').setSelectionRange(pos,pos)};if($('#filter'))$('#filter').onchange=e=>{filter=e.target.value;render()};if(actionPending)setActionControls(true);publicViewControls()}
 $('#close').onclick=()=>$('#detail').close();$('#pause').onclick=e=>action(e.target,()=>api('pause',{paused:!state.paused}));$('#export').onclick=()=>download('HUNT-workspace-private.json',JSON.stringify(state,null,2));
-(async()=>{try{const token=location.hash.slice(1);if(token){history.replaceState(null,'','/');await api('login',{token})}await refresh()}catch(e){notify(e.message,true);$('#content').innerHTML='<h1>Your private workspace</h1><p>Sign in through your private HUNT site. For the local workspace, open Start HUNT.command.</p>'}})();
+(async()=>{try{const token=location.hash.slice(1);if(token){history.replaceState(null,'','/');await api('login',{token})}await refresh();resumeDiscoveryProgress()}catch(e){notify(e.message,true);$('#content').innerHTML='<h1>Your private workspace</h1><p>Sign in through your private HUNT site. For the local workspace, open Start HUNT.command.</p>'}})();
 
 setInterval(()=>{if(state&&!actionPending&&!document.querySelector('dialog[open]'))refresh().catch(()=>{});},15000);
