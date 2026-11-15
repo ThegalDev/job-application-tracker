@@ -17,6 +17,8 @@ test('complete native mapping preserves paragraph boundaries, metrics and protec
  const project=[{id:0,text:'PROJECTS',editable:false},{id:1,text:'Culture project',editable:false},{id:2,text:'Tech Stack: Next.js 14, TypeScript, React',editable:false},{id:3,text:'Built a useful culture platform for HR teams.',kind:'bullet',editable:true}];
  assert.doesNotThrow(()=>validateNativeRewrites(project,{replacements:[{id:3,text:'Built a useful culture platform for HR teams using Next.js 14.'}]}));
  assert.throws(()=>validateNativeRewrites(project,{replacements:[{id:3,text:'Built a useful culture platform serving 14 HR teams.'}]}));
+ assert.throws(()=>validateNativeRewrites([{id:1,text:'Managed HR operations and full-cycle recruitment.',kind:'bullet',editable:true}],{replacements:[{id:1,text:'Managed HR operations and full-cycle recruitment for Sales and Marketing.'}]}),/unsourced department/);
+ const labelled={replacements:[{id:1,text:'Recruitment Systems: Workable and HireFlix.'}]};validateNativeRewrites([{id:1,text:'Workable and HireFlix.',prefix:'Recruitment Systems:',kind:'bullet',editable:true}],labelled);assert.equal(labelled.replacements[0].text,'Workable and HireFlix.');
 });
 test('native draft reserves once and repeated background delivery does not call the model twice',async()=>{
  const BUCKET=new Bucket(),env={BUCKET,OPENAI_API_KEY:'fixture'},input={source_doc_id:'1u9NQcSpOF1jRwHUmN-LeKZTWazENUoQjvYV8xzkLsGQ',source_revision:'revision',paragraphs:[{id:1,text:'Maintained accurate employee records.',editable:true,kind:'bullet'}]};
@@ -30,6 +32,11 @@ test('a shortened bullet gets one scoped correction; every model call consumes a
  await executeNativeCVDraft(env,task.id,'fixture',fetcher);assert.equal(calls,2);const stored=await (await BUCKET.get('hunt/private/native-cv-tasks/'+task.id+'.json')).json();assert.equal(stored.status,'completed');assert.equal(stored.result.replacements.length,2);
  const allowance=await (await BUCKET.get('hunt/private/native-cv-ai-attempts/'+new Date().toISOString().slice(0,10)+'.json')).json();assert.equal(allowance.count,2);
  await executeNativeCVDraft(env,task.id,'fixture',fetcher);assert.equal(calls,2);
+});
+test('saved drafts recover without another generation only after every current validation passes',async()=>{
+ const bucket=new Bucket(),body={source_doc_id:'1u9NQcSpOF1jRwHUmN-LeKZTWazENUoQjvYV8xzkLsGQ',source_revision:'r1',paragraphs:[{id:1,text:'Built a practical recruitment assistant workflow.',editable:true,kind:'bullet'}]},job={id:'job',raw_hash:'v1'},task=await createNativeCVTask(bucket,body,job),key='hunt/private/native-cv-tasks/'+task.id+'.json',original=await (await bucket.get(key)).json();
+ await bucket.put(key,JSON.stringify({...original,status:'failed',repair_attempts:2,candidate:{replacements:[{id:1,text:'Built a practical recruitment assistant workflow serving 900 employers.'}]}}));assert.equal((await createNativeCVTask(bucket,body,job)).status,'failed');
+ await bucket.put(key,JSON.stringify({...original,status:'failed',candidate:{replacements:[{id:1,text:'Built a practical recruitment assistant workflow using n8n.'}]}}));assert.equal((await createNativeCVTask(bucket,body,job)).status,'completed');assert.equal((await (await bucket.get(key)).json()).recovered_without_model_call,true);
 });
 test('native PDF downloads bind exact private bytes and reject corrupted storage and anonymous access',async()=>{
  const BUCKET=new Bucket(),bytes=Buffer.from('%PDF-1.4\nfixture-native-export'),sha256=createHash('sha256').update(bytes).digest('hex'),p={id:'native-fixture',payload_hash:'a'.repeat(64),native_cv:{sha256,document_revision:'revision'}};

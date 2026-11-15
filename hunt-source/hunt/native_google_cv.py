@@ -108,10 +108,18 @@ class NativeGoogleCV:
     def tailor(self,source,replacements,title):
         plan=mapping(source);expected={p['id']:p for p in plan if p['editable']}
         edits={p['id']:p['text'] for p in replacements}
+        for i,new in list(edits.items()):
+            prefix=expected.get(i,{}).get('prefix','').strip()
+            while prefix and new.lstrip().lower().startswith(prefix.lower()):new=new.lstrip()[len(prefix):].lstrip()
+            if prefix and not expected[i]['prefix'][-1].isspace() and new and not new[0].isspace():new=' '+new
+            edits[i]=new
         if len(edits)!=len(replacements) or edits.keys()!=expected.keys():raise ValueError('All native paragraphs must be reviewed exactly once')
+        source_text=' '.join(p['text'] for p in plan)
+        unsupported_scopes=[term for term in ['sales','marketing','G&A','go-to-market','GTM'] if not re.search(r'\b'+re.escape(term)+r'\b',source_text,re.I)]
         versions=project_tool_versions(plan)
         for i,new in edits.items():
             old=expected[i]['text']
+            if expected[i]['kind']!='headline' and any(re.search(r'\b'+re.escape(term)+r'\b',new,re.I) for term in unsupported_scopes):raise ValueError('Unsourced hiring department in native CV')
             if not isinstance(new,str) or not new.strip() or re.search(r'[\n\r\v]',new):raise ValueError('Paragraph boundaries may not change')
             nums=lambda s:{n.replace(',','') for n in re.findall(r'\b\d+(?:[,.]\d+)*\b',s)}
             allowed=nums(' '.join(p['text'] for p in plan)) if expected[i]['kind']=='summary' else nums(old)
@@ -160,20 +168,20 @@ class NativeGoogleCV:
         fd=os.open(path,os.O_CREAT|os.O_TRUNC|os.O_WRONLY,0o600)
         with os.fdopen(fd,'wb') as out:out.write(pdf)
         _,_,final_rows=paragraphs(final)
-        report={'tailored_text':'\n'.join(text(row) for row in final_rows)+'\n','source_doc_id':MASTER,'source_revision':source['revisionId'],'document_id':id,'document_url':copied.get('webViewLink'),'document_revision':final['revisionId'],'sha256':sha,'bytes':len(pdf),'qa':signature(final),'master_unchanged':True,'paragraphs_reviewed':len(expected)}
+        report={'tailored_text':'\n'.join(text(row) for row in final_rows)+'\n','validation_version':3,'source_doc_id':MASTER,'source_revision':source['revisionId'],'document_id':id,'document_url':copied.get('webViewLink'),'document_revision':final['revisionId'],'sha256':sha,'bytes':len(pdf),'qa':signature(final),'master_unchanged':True,'paragraphs_reviewed':len(expected)}
         private_json(path.with_suffix('.json'),report)
         return path,report
 
 def prepare_native_package(client,package_id,root):
     google=NativeGoogleCV(root);source=google.master();plan=mapping(source)
     package=client.request('/api/package?'+urlencode({'id':package_id}))
-    if package.get('native_cv') and package['native_cv']['source_revision']==source['revisionId']:
+    if package.get('native_cv') and package['native_cv'].get('validation_version')==3 and package['native_cv']['source_revision']==source['revisionId']:
         _,_,rows=paragraphs(source);master_text='\n'.join(text(row) for row in rows)+'\n'
         target=Path(root)/'data/master-cv.txt';fd=os.open(target,os.O_CREAT|os.O_TRUNC|os.O_WRONLY,0o600)
         with os.fdopen(fd,'w') as out:out.write(master_text)
         return package
-    task=client.request('/api/native-cv-draft',body={'job_id':package['job_id'],'source_doc_id':MASTER,'source_revision':source['revisionId'],'paragraphs':plan})
-    task=client.request('/api/native-cv-draft?'+urlencode({'id':task['id']}))
+    task=client.request('/api/native-cv-draft',body={'job_id':package['job_id'],'validation_version':3,'source_doc_id':MASTER,'source_revision':source['revisionId'],'paragraphs':plan})
+    task=client.request('/api/native-cv-draft?'+urlencode({'id':task['id']}));private_json(Path(root)/'data/native-cv-task.json',task)
     deadline=time.monotonic()+570
     while task['status'] in ('queued','running') and time.monotonic()<deadline:
         time.sleep(3);task=client.request('/api/native-cv-draft?'+urlencode({'id':task['id']}));private_json(Path(root)/'data/native-cv-task.json',task)
