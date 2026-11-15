@@ -13,8 +13,10 @@ notification_source=(ROOT/'notifications.mjs').read_text().replace('export ','')
 notification_prelude='const {notificationStatus,connectNotifications,notifyRun}=(()=>{'+notification_source+';return {notificationStatus,connectNotifications,notifyRun};})();\n'
 visibility_source=(ROOT/'visibility.mjs').read_text().replace('export ','')
 visibility_prelude='const {visibilitySettings,jobVisibility,updateVisibility}=(()=>{'+visibility_source+';return {visibilitySettings,jobVisibility,updateVisibility};})();\n'
-server_source=(ROOT/'server.mjs').read_text().replace("import {visibilitySettings,jobVisibility,updateVisibility} from './visibility.mjs';\n",'').replace("import {notificationStatus,connectNotifications,notifyRun} from './notifications.mjs';\n",'')
-source=visibility_prelude+notification_prelude+'const DRAFTING_INSTRUCTIONS='+json.dumps(instructions,ensure_ascii=False)+';\n'+'const WRITING_PROFILE='+json.dumps(profile,ensure_ascii=False)+';\n'+'const ASSETS='+json.dumps(assets,ensure_ascii=False)+';\n'+server_source
+application_source=(ROOT/'applications.mjs').read_text().replace('export ','')
+application_prelude='const {trackerStatus,connectTracker,manualApplications,recordApplied,syncTracker}=(()=>{'+application_source+';return {trackerStatus,connectTracker,manualApplications,recordApplied,syncTracker};})();\n'
+server_source=(ROOT/'server.mjs').read_text().replace("import {trackerStatus,connectTracker,manualApplications,recordApplied,syncTracker} from './applications.mjs';\n",'').replace("import {visibilitySettings,jobVisibility,updateVisibility} from './visibility.mjs';\n",'').replace("import {notificationStatus,connectNotifications,notifyRun} from './notifications.mjs';\n",'')
+source=application_prelude+visibility_prelude+notification_prelude+'const DRAFTING_INSTRUCTIONS='+json.dumps(instructions,ensure_ascii=False)+';\n'+'const WRITING_PROFILE='+json.dumps(profile,ensure_ascii=False)+';\n'+'const ASSETS='+json.dumps(assets,ensure_ascii=False)+';\n'+server_source
 out=ROOT/'dist/server/index.js';out.parent.mkdir(parents=True,exist_ok=True);out.write_text(source)
 manifest=ROOT/'.openai/hosting.json'
 config=json.loads(manifest.read_text());config['r2']='BUCKET';config['d1']=None;config.pop('static',None)

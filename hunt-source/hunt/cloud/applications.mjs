@@ -1,0 +1,64 @@
+// Owner-reported applications. Recording is distinct from employer submission.
+export const TRACKER_ID='1H8Dgplggg8wkuNoK-lIVJ602AzQHjkXzpOVQ3ONgKeo';
+const PREFIX='hunt/runtime/manual-applications/',CONNECTION='hunt/private/tracker-google.json';
+const ACCOUNT='majekadegbeaminat85@gmail.com',SCOPE='https://www.googleapis.com/auth/spreadsheets';
+const HEADERS=['S/N','Company','Role','Applied / first email','Latest email','Current status','Response type','Follow-up priority','Email evidence','Notes'];
+const norm=s=>String(s||'').toLowerCase().replace(/&/g,' and ').replace(/\bops\b/g,'operations').replace(/[^a-z0-9]+/g,' ').trim();
+const read=async(b,k)=>{const o=await b.get(k);return o?o.json():null};
+const write=(b,k,v,o={})=>b.put(k,JSON.stringify(v),o);
+async function google(connection,fetcher){
+ const r=await fetcher('https://oauth2.googleapis.com/token',{method:'POST',redirect:'error',signal:AbortSignal.timeout(10000),headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:connection.client_id,client_secret:connection.client_secret,refresh_token:connection.refresh_token,grant_type:'refresh_token'})});
+ if(!r.ok)throw Error('Tracker authorization needs reconnection');const t=await r.json();if(!t.access_token)throw Error('Tracker authorization returned no token');
+ return async(path,body)=>{const response=await fetcher('https://sheets.googleapis.com/v4/spreadsheets/'+TRACKER_ID+path,{method:body?'POST':'GET',redirect:'error',signal:AbortSignal.timeout(10000),headers:{Authorization:'Bearer '+t.access_token,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});if(!response.ok)throw Object.assign(Error('Tracker request failed ('+response.status+')'),{http_status:response.status});return response.json()};
+}
+export async function trackerStatus(bucket){return {status:await read(bucket,CONNECTION)?'connected':'awaiting_sheet_authorization',spreadsheet_url:'https://docs.google.com/spreadsheets/d/'+TRACKER_ID+'/edit',sheet:'Applications'};}
+export async function connectTracker(bucket,connection,fetcher=fetch){
+ const allowed=new Set(['openid','email','https://www.googleapis.com/auth/userinfo.email',SCOPE]);
+ if(connection.account!==ACCOUNT||!Array.isArray(connection.scopes)||!connection.scopes.includes(SCOPE)||connection.scopes.some(s=>!allowed.has(s)))throw Error('A dedicated Sheets connection for the owner account is required');
+ for(const k of ['client_id','client_secret','refresh_token'])if(typeof connection[k]!=='string'||!connection[k]||connection[k].length>4096)throw Error('Incomplete tracker authorization');
+ const refresh=await fetcher('https://oauth2.googleapis.com/token',{method:'POST',redirect:'error',signal:AbortSignal.timeout(10000),headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:connection.client_id,client_secret:connection.client_secret,refresh_token:connection.refresh_token,grant_type:'refresh_token'})});if(!refresh.ok)throw Error('Tracker authorization failed');const token=await refresh.json();
+ const profile=await fetcher('https://openidconnect.googleapis.com/v1/userinfo',{redirect:'error',signal:AbortSignal.timeout(10000),headers:{Authorization:'Bearer '+token.access_token}});if(!profile.ok)throw Error('Tracker account could not be checked');const account=await profile.json();if(account.email!==ACCOUNT||account.email_verified!==true)throw Error('Tracker account does not match the owner');
+ const api=await google(connection,fetcher),meta=await api('?fields=spreadsheetId,sheets(properties)');if(meta.spreadsheetId!==TRACKER_ID||!meta.sheets.some(s=>s.properties.title==='Applications'))throw Error('Authorized tracker tab was not found');
+ await write(bucket,CONNECTION,Object.fromEntries(['account','scopes','client_id','client_secret','refresh_token'].map(k=>[k,connection[k]])));return trackerStatus(bucket);
+}
+export async function manualApplications(bucket){const list=await bucket.list({prefix:PREFIX,limit:1000});if(list.truncated)throw Error('Application history needs pagination before continuing');const rows=[];for(const x of list.objects||[]){const row=await read(bucket,x.key);if(row)rows.push(row)}return rows;}
+async function appId(job){const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(norm(job.company)+'|'+norm(job.title)));return 'manual-'+Array.from(new Uint8Array(bytes),x=>x.toString(16).padStart(2,'0')).join('').slice(0,32)}
+export async function recordApplied(bucket,body,snapshot,fetcher=fetch){
+ const job=snapshot.jobs.find(j=>j.id===body.job_id);if(!job)throw Error('Job not found');if(body.confirmed!==true)throw Error('Confirm that you already submitted this application');
+ const date=String(body.applied_date||''),today=new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Lagos'});
+ if(!/^20\d{2}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date))||new Date(date).toISOString().slice(0,10)!==date||date>today)throw Error('Choose a valid application date that is not in the future');
+ const notes=String(body.notes||'').trim();if(notes.length>2000)throw Error('Application notes are too long');let evidence=null;if(body.evidence_url){const u=new URL(body.evidence_url);if(u.protocol!=='https:'||u.username||u.password||u.href.length>2000)throw Error('Evidence must be an HTTPS link');evidence=u.href;}
+ const existing=snapshot.applications.find(a=>norm(a.company)===norm(job.company)&&norm(a.role)===norm(job.title));
+ if(existing)return {application:existing,replayed:true,message:'This role is already in Applications. Its existing status was preserved.'};
+ const id=await appId(job),key=PREFIX+id+'.json';let row=await read(bucket,key);
+ if(!row){row={id,job_id:job.id,company:job.company,role:job.title,applied:date,status:'Application reported',latest:new Date().toISOString(),evidence,notes,posting_url:job.original_application_url||job.url,recorded_by:'owner',employer_acknowledged:false,employer_form_submitted_by_hunt:false,tracker_sync:{status:'pending'}};const saved=await write(bucket,key,row,{onlyIf:{etagDoesNotMatch:'*'}});if(!saved)row=await read(bucket,key);}
+ const sync=await syncTracker(bucket,id,fetcher);return {application:{...row,tracker_sync:sync},message:sync.status==='synced'?'Applied recorded in Applications and verified in your Google tracker.':'Applied recorded in Applications. Google tracker: '+(sync.reason||sync.status)};
+}
+export async function syncTracker(bucket,id,fetcher=fetch){
+ if(!/^manual-[a-f0-9]{32}$/.test(id||''))throw Error('Unknown manual application');const key=PREFIX+id+'.json',row=await read(bucket,key);if(!row)throw Error('Application not found');if(row.tracker_sync?.status==='synced')return row.tracker_sync;
+ const save=async sync=>{await write(bucket,key,{...row,tracker_sync:sync});return sync},connection=await read(bucket,CONNECTION);
+ if(!connection)return save({status:'blocked',reason:'Connect Google tracker to sync this application'});
+ const lockKey='hunt/private/tracker-write-lock.json',owner=crypto.randomUUID(),old=await bucket.get(lockKey),lease=old?await old.json():null;
+ if(lease&&Date.parse(lease.expires_at)>Date.now())return save({status:'pending',reason:'Another tracker update is in progress; retry sync shortly'});
+ const locked=await write(bucket,lockKey,{owner,expires_at:new Date(Date.now()+120000).toISOString()},{onlyIf:old?{etagMatches:old.etag}:{etagDoesNotMatch:'*'}});if(!locked)return save({status:'pending',reason:'Another tracker update is in progress; retry sync shortly'});
+ let attempted=false;
+ try{
+  const api=await google(connection,fetcher),meta=await api('?fields=spreadsheetId,sheets(properties,tables)');const tab=meta.sheets.find(s=>s.properties.title==='Applications');if(meta.spreadsheetId!==TRACKER_ID||!tab)throw Error('Tracker identity changed');if(tab.tables?.length)throw Error('Tracker now contains a native table; its append mapping needs review');
+  const limit=Math.min(tab.properties.gridProperties.rowCount,1000),range=encodeURIComponent("'Applications'!A1:J"+limit),data=await api('/values/'+range+'?valueRenderOption=FORMATTED_VALUE'),rows=data.values||[];
+  if(JSON.stringify(rows[0])!==JSON.stringify(HEADERS))throw Error('Tracker columns changed; no row was written');if(rows.length>=limit)throw Error('Tracker read bound reached; no row was written');
+  const marker='HUNT-ID:'+id,found=rows.findIndex((r,i)=>i>0&&(String(r[9]||'').includes(marker)||norm(r[1])===norm(row.company)&&norm(r[2])===norm(row.role)));
+  if(found>0)return save({status:'synced',range:'Applications!A'+(found+1)+':J'+(found+1),existing:true,verified_at:new Date().toISOString()});
+  if(['uncertain','sending'].includes(row.tracker_sync?.status))return save({status:'uncertain',reason:'Earlier write is unconfirmed; no duplicate append was attempted'});
+  const probe=await api('?includeGridData=true&ranges='+encodeURIComponent("'Applications'!A2:J2")+'&fields=sheets(data(rowData(values(userEnteredFormat,dataValidation))))');
+  const template=probe.sheets?.[0]?.data?.[0]?.rowData?.[0]?.values||[];
+  for(const [index,value]of [[5,'Application reported'],[7,'Monitor']]){const rule=template[index]?.dataValidation;if(rule&&(rule.condition?.type!=='ONE_OF_LIST'||!rule.condition.values?.some(x=>x.userEnteredValue===value)))throw Error('Tracker dropdown changed; no row was written');}
+  const serial=Math.max(0,...rows.slice(1).map(r=>Number(r[0])||0))+1,values=[serial,row.company,row.role,row.applied,'','Application reported','Owner-reported submission; no employer reply verified','Monitor',row.evidence&&new URL(row.evidence).hostname==='mail.google.com'?row.evidence:'',marker+' | Owner confirmed an application submitted outside HUNT. Employer acknowledgement not verified. Posting: '+row.posting_url+(row.evidence?' | Evidence: '+row.evidence:'')+(row.notes?' | '+row.notes:'')];
+  const cells=values.map((value,i)=>{const cell={userEnteredValue:typeof value==='number'?{numberValue:value}:{stringValue:String(value)}};if(template[i]?.userEnteredFormat){cell.userEnteredFormat=structuredClone(template[i].userEnteredFormat);if(cell.userEnteredFormat.textFormat)delete cell.userEnteredFormat.textFormat.link;}if(template[i]?.dataValidation)cell.dataValidation=template[i].dataValidation;return cell;});
+  await save({status:'sending',started_at:new Date().toISOString()});attempted=true;
+  await api(':batchUpdate',{requests:[{appendCells:{sheetId:tab.properties.sheetId,rows:[{values:cells}],fields:'userEnteredValue,userEnteredFormat,dataValidation'}}]});
+  const verify=await api('/values/'+range+'?valueRenderOption=FORMATTED_VALUE'),index=(verify.values||[]).findIndex(r=>String(r[9]||'').includes(marker));
+  if(index<1)throw Error('Tracker write readback was not found');const observed=verify.values[index];if(observed[1]!==row.company||observed[2]!==row.role||observed[3]!==row.applied||observed[5]!=='Application reported')throw Error('Tracker write readback did not match');
+  return save({status:'synced',range:'Applications!A'+(index+1)+':J'+(index+1),verified_at:new Date().toISOString()});
+ }catch(error){const uncertain=attempted&&!(error.http_status>=400&&error.http_status<500);return save({status:uncertain?'uncertain':'failed',reason:uncertain?'Tracker write outcome is unconfirmed; retry checks for the existing row before any further write':'Tracker update was not accepted. Check the connection and tracker schema.'});}
+ finally{const lock=await read(bucket,lockKey);if(lock?.owner===owner)await bucket.delete(lockKey);}
+}
