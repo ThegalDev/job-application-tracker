@@ -86,7 +86,7 @@ class NativeGoogleCV:
         for i,new in edits.items():
             old=expected[i]['text']
             if not isinstance(new,str) or not new.strip() or re.search(r'[\n\r\v]',new):raise ValueError('Paragraph boundaries may not change')
-            nums=lambda s:set(re.findall(r'\d+(?:[,.]\d+)*',s))
+            nums=lambda s:{n.replace(',','') for n in re.findall(r'\d+(?:[,.]\d+)*',s)}
             allowed=nums(' '.join(p['text'] for p in plan)) if expected[i]['kind']=='summary' else nums(old)
             if nums(new)-allowed or expected[i]['kind'] not in ('summary','headline') and nums(old)-nums(new):raise ValueError('Source metrics changed')
             if expected[i]['kind']=='bullet' and len(new.split())<len(old.split())*.9:raise ValueError('Source bullet shortened')
@@ -139,10 +139,10 @@ def prepare_native_package(client,package_id,root):
     package=client.request('/api/package?'+urlencode({'id':package_id}))
     if package.get('native_cv') and package['native_cv']['source_revision']==source['revisionId']:return package
     task=client.request('/api/native-cv-draft',body={'job_id':package['job_id'],'source_doc_id':MASTER,'source_revision':source['revisionId'],'paragraphs':plan})
-    deadline=time.monotonic()+330
+    deadline=time.monotonic()+570
     while task['status'] in ('queued','running') and time.monotonic()<deadline:
-        time.sleep(3);task=client.request('/api/native-cv-draft?'+urlencode({'id':task['id']}))
-    if task['status']!='completed':raise ValueError('Native CV drafting did not complete; no upload is permitted')
+        time.sleep(3);task=client.request('/api/native-cv-draft?'+urlencode({'id':task['id']}));private_json(Path(root)/'data/native-cv-task.json',task)
+    if task['status']!='completed':raise ValueError('Native CV drafting did not complete: '+str(task.get('error') or task['status']))
     path,report=google.tailor(source,task['result']['replacements'],'Majekadegbe Aminat Bamitale — '+str(package.get('company','Employer'))+' — '+str(package.get('role','Role'))+' — Tailored CV')
     _,_,rows=paragraphs(source);master_text='\n'.join(text(row) for row in rows)+'\n'
     result=client.request('/api/native-cv-attach',body={'package_id':package['id'],'expected_payload_hash':package['payload_hash'],'tailored_text':report.pop('tailored_text'),'native_cv':report,'pdf_base64':base64.b64encode(path.read_bytes()).decode(),'master_text':master_text})

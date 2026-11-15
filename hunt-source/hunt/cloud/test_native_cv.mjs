@@ -19,6 +19,13 @@ test('native draft reserves once and repeated background delivery does not call 
  const fetcher=async()=>{calls++;return Response.json({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify({replacements:[{id:1,text:'Maintained accurate employee records.'}]})}]}]})};
  await Promise.all([executeNativeCVDraft(env,task.id,'fixture',fetcher),executeNativeCVDraft(env,task.id,'fixture',fetcher)]);assert.equal(calls,1);assert.equal((await (await BUCKET.get('hunt/private/native-cv-tasks/'+task.id+'.json')).json()).status,'completed');
 });
+test('a shortened bullet gets one scoped correction; every model call consumes allowance',async()=>{
+ const BUCKET=new Bucket(),env={BUCKET,OPENAI_API_KEY:'fixture'},paragraphs=[{id:1,text:'Maintained accurate employee records across several distributed operational teams.',editable:true,kind:'bullet'},{id:2,text:'Supported recruitment workflows.',editable:true,kind:'bullet'}],task=await createNativeCVTask(BUCKET,{source_doc_id:'1u9NQcSpOF1jRwHUmN-LeKZTWazENUoQjvYV8xzkLsGQ',source_revision:'r1',paragraphs},{id:'job',raw_hash:'v1'});let calls=0;
+ const fetcher=async(url,options)=>{calls++;const input=JSON.parse(JSON.parse(options.body).input);if(calls===2)assert.deepEqual(input.paragraphs.filter(p=>p.editable).map(p=>p.id),[1]);const replacements=calls===1?[{id:1,text:'Managed records.'},{id:2,text:'Supported recruitment workflows.'}]:[{id:1,text:'Maintained accurate employee records across several distributed operational teams.'}];return Response.json({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify({replacements})}]}]})};
+ await executeNativeCVDraft(env,task.id,'fixture',fetcher);assert.equal(calls,2);const stored=await (await BUCKET.get('hunt/private/native-cv-tasks/'+task.id+'.json')).json();assert.equal(stored.status,'completed');assert.equal(stored.result.replacements.length,2);
+ const allowance=await (await BUCKET.get('hunt/private/native-cv-ai-attempts/'+new Date().toISOString().slice(0,10)+'.json')).json();assert.equal(allowance.count,2);
+ await executeNativeCVDraft(env,task.id,'fixture',fetcher);assert.equal(calls,2);
+});
 test('native PDF downloads bind exact private bytes and reject corrupted storage and anonymous access',async()=>{
  const BUCKET=new Bucket(),bytes=Buffer.from('%PDF-1.4\nfixture-native-export'),sha256=createHash('sha256').update(bytes).digest('hex'),p={id:'native-fixture',payload_hash:'a'.repeat(64),native_cv:{sha256,document_revision:'revision'}};
  await BUCKET.put('hunt/owner.json','{"id":"owner"}');await BUCKET.put('hunt/runtime/packages.json',JSON.stringify([p]));await BUCKET.put('hunt/private/native-cv-pdfs/'+sha256+'.json',JSON.stringify({pdf_base64:bytes.toString('base64')}));
