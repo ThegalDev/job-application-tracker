@@ -129,7 +129,8 @@ class NativeGoogleCV:
         sha=digest(pdf);path=self.root/'data/application-files'/f'{sha}.pdf';path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
         fd=os.open(path,os.O_CREAT|os.O_TRUNC|os.O_WRONLY,0o600)
         with os.fdopen(fd,'wb') as out:out.write(pdf)
-        report={'source_doc_id':MASTER,'source_revision':source['revisionId'],'document_id':id,'document_url':copied.get('webViewLink'),'document_revision':final['revisionId'],'sha256':sha,'bytes':len(pdf),'qa':signature(final),'master_unchanged':True,'paragraphs_reviewed':len(expected)}
+        _,_,final_rows=paragraphs(final)
+        report={'tailored_text':'\n'.join(text(row) for row in final_rows)+'\n','source_doc_id':MASTER,'source_revision':source['revisionId'],'document_id':id,'document_url':copied.get('webViewLink'),'document_revision':final['revisionId'],'sha256':sha,'bytes':len(pdf),'qa':signature(final),'master_unchanged':True,'paragraphs_reviewed':len(expected)}
         private_json(path.with_suffix('.json'),report)
         return path,report
 
@@ -144,7 +145,7 @@ def prepare_native_package(client,package_id,root):
     if task['status']!='completed':raise ValueError('Native CV drafting did not complete; no upload is permitted')
     path,report=google.tailor(source,task['result']['replacements'],'Majekadegbe Aminat Bamitale — '+str(package.get('company','Employer'))+' — '+str(package.get('role','Role'))+' — Tailored CV')
     _,_,rows=paragraphs(source);master_text='\n'.join(text(row) for row in rows)+'\n'
-    result=client.request('/api/native-cv-attach',body={'package_id':package['id'],'expected_payload_hash':package['payload_hash'],'native_cv':report,'pdf_base64':base64.b64encode(path.read_bytes()).decode(),'master_text':master_text})
+    result=client.request('/api/native-cv-attach',body={'package_id':package['id'],'expected_payload_hash':package['payload_hash'],'tailored_text':report.pop('tailored_text'),'native_cv':report,'pdf_base64':base64.b64encode(path.read_bytes()).decode(),'master_text':master_text})
     target=Path(root)/'data/master-cv.txt';fd=os.open(target,os.O_CREAT|os.O_TRUNC|os.O_WRONLY,0o600)
     with os.fdopen(fd,'w') as out:out.write(master_text)
     return result

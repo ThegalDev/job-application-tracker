@@ -27,3 +27,13 @@ test('native PDF downloads bind exact private bytes and reject corrupted storage
  const result=await handle(new Request(url,{headers}),env);assert.equal(result.headers.get('Content-Type'),'application/pdf');assert.deepEqual(Buffer.from(await result.arrayBuffer()),bytes);
  await BUCKET.put('hunt/private/native-cv-pdfs/'+sha256+'.json',JSON.stringify({pdf_base64:Buffer.from('%PDF-tampered').toString('base64')}));assert.equal((await handle(new Request(url,{headers}),env)).status,400);
 });
+test('native attachment creates a new package version and rejects stale parents or missing provenance',async()=>{
+ const BUCKET=new Bucket(),job={id:'job',company:'Fixture',title:'People Operations',raw_hash:'v1',open:true,description:'Remote worldwide HR operations.',location:'Remote worldwide'},base={id:'parent',job_id:'job',job_version:'v1',payload_hash:'a'.repeat(64),status:'review',company:'Fixture',role:'People Operations'},bytes=Buffer.from('%PDF-1.4\nfixture-export'),sha256=createHash('sha256').update(bytes).digest('hex');
+ await BUCKET.put('hunt/owner.json','{"id":"owner"}');await BUCKET.put('hunt/snapshot.json',JSON.stringify({snapshot:{jobs:[job],packages:[],applications:[]}}));await BUCKET.put('hunt/runtime/packages.json',JSON.stringify([base]));
+ const env={BUCKET},origin='https://hunt.example',token='a'.repeat(64),headers={'oai-authenticated-user-id':'owner',Origin:origin,Cookie:'__Host-hunt_csrf='+token,'X-CSRF-Token':token,'Content-Type':'application/json'},native_cv={source_doc_id:'1u9NQcSpOF1jRwHUmN-LeKZTWazENUoQjvYV8xzkLsGQ',source_revision:'r1',document_id:'fixture-copy-document-id',document_revision:'r2',master_unchanged:true,paragraphs_reviewed:98,qa:{paragraphs:177,bullets:90,drawings:7,links:Array(12).fill({url:'https://example.test'})},sha256,bytes:bytes.length},body={package_id:base.id,expected_payload_hash:base.payload_hash,native_cv,pdf_base64:bytes.toString('base64'),tailored_text:'Fixture tailored CV. '.repeat(65),master_text:'Fixture authoritative CV. '.repeat(60)};
+ const post=b=>handle(new Request(origin+'/api/native-cv-attach',{method:'POST',headers,body:JSON.stringify(b)}),env);
+ assert.equal((await post({...body,native_cv:{...native_cv,master_unchanged:false}})).status,400);
+ const response=await post(body);assert.equal(response.status,200);const result=await response.json();assert.notEqual(result.id,base.id);assert.notEqual(result.payload_hash,base.payload_hash);assert.equal(result.native_cv.sha256,sha256);
+ assert.equal((await post({...body,expected_payload_hash:'stale'})).status,400);
+ const download=await handle(new Request(origin+'/api/cv-artifact?id='+result.id+'&hash='+result.payload_hash,{headers}),env);assert.deepEqual(Buffer.from(await download.arrayBuffer()),bytes);
+});
