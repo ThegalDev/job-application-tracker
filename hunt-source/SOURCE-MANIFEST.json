@@ -4,8 +4,8 @@
   "files": [
     {
       "path": "hunt/APPLICATION-RUNNER-SETUP.md",
-      "bytes": 3639,
-      "sha256": "c8430fe176f98d13435c25961eac5c11902f944e731ef223c4d1df996fa7ff05"
+      "bytes": 2946,
+      "sha256": "c8967f88c3ce15c3035397ff3c251cd1a22266493b8998e393ca053d21f203f0"
     },
     {
       "path": "hunt/CONNECTOR-BRIDGE.md",
@@ -34,8 +34,8 @@
     },
     {
       "path": "hunt/application_runner.py",
-      "bytes": 12148,
-      "sha256": "9877c142d80c9138f61bfbe45385539dbd55cfb843cc208f5e640018bcd93068"
+      "bytes": 12525,
+      "sha256": "2e3d45604833de5072a8e1995d2ff41c53968933e8b930e4b8a992fb076353de"
     },
     {
       "path": "hunt/cloud/.gitignore",
@@ -219,13 +219,13 @@
     },
     {
       "path": "hunt/install_mac_application_worker.py",
-      "bytes": 1725,
-      "sha256": "0f1bb7a8c3f58259c755ed7ebc1b1cc0bb615c162c36ee9d4963d7401270978c"
+      "bytes": 2454,
+      "sha256": "85033061ce02b69973c04de30aecd892db4f739d5604650536da04f3b8e8eaf2"
     },
     {
       "path": "hunt/mac_application_worker.py",
-      "bytes": 7763,
-      "sha256": "29dad33ea24231bf1711115cc037bc4ae2f5124d9cf34f7d25a3ef6f8a141b69"
+      "bytes": 7604,
+      "sha256": "2211324649fe8e3addf79874c1149289352e2b6ee0ea0e6202f91c22a8c45696"
     },
     {
       "path": "hunt/matching.py",

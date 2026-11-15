@@ -10,7 +10,7 @@ import os
 import re
 from pathlib import Path
 import application_execution as execution
-from application_runner import ROOT,HUNTConnection,ProductionLeverAdapter,runner_db
+from application_runner import ROOT,HUNTConnection,ProductionLeverAdapter,runner_db,load_owner_key
 from standing_authorization import read_authorization,autonomous_engine,execute_under_standing_authorization
 
 
@@ -68,7 +68,7 @@ def tick(root=ROOT):
         try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError:return {'status':'already_running'}
         policy=read_authorization(directory)
-        key=next((line.partition('=')[2].strip().strip('\"\'') for line in (root.parent.parent/'work/netlify-runtime.env').read_text().splitlines() if line.partition('=')[0].strip()=='HUNT_OWNER_KEY'),None)
+        key=load_owner_key(root)
         client=HUNTConnection(key,root);engine,_=autonomous_engine(runner_db(root),client.checkpoint,directory)
         def report(status,message,count=0):
             output={'status':status,'message':message,'eligible_candidates':count,'standing_authorization':True};client.request('/api/application-runner-status',body=output);return output

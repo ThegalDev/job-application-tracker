@@ -1,22 +1,30 @@
-"""Install the owner-authorized Mac-awake application worker; no secrets in plist."""
+"""Install the authorized worker privately outside macOS-protected Documents."""
+import json
 import os
 import plistlib
+import shutil
 import subprocess
 from pathlib import Path
-from application_runner import ROOT
+from application_runner import ROOT,load_owner_key
 from standing_authorization import save_authorization
 LABEL='com.hunt.application-worker'
 PYTHON='/Users/theoneglobal/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3'
 if __name__=='__main__':
-    policy=save_authorization(ROOT/'data','owner authorized in HUNT workspace conversation',True)
-    logs=ROOT/'data/application-worker-logs';logs.mkdir(mode=0o700,exist_ok=True)
+    target=Path.home()/'Library/Application Support/HUNT/application-worker';target.mkdir(parents=True,exist_ok=True,mode=0o700);target.chmod(0o700)
+    for name in ['mac_application_worker.py','application_runner.py','application_execution.py','standing_authorization.py','employer_browser.mjs']:
+        shutil.copy2(ROOT/name,target/name)
+    private=target/'data';private.mkdir(exist_ok=True,mode=0o700);private.chmod(0o700)
+    save_authorization(private,'owner authorized in HUNT workspace conversation',True)
+    shutil.copy2(ROOT/'data/master-cv.txt',private/'master-cv.txt');(private/'master-cv.txt').chmod(0o600)
+    fd=os.open(private/'owner-connection.json',os.O_CREAT|os.O_TRUNC|os.O_WRONLY,0o600)
+    with os.fdopen(fd,'w') as file:json.dump({'owner_key':load_owner_key(ROOT)},file)
+    logs=private/'logs';logs.mkdir(mode=0o700,exist_ok=True)
     for name in ['stdout.log','stderr.log']:
         fd=os.open(logs/name,os.O_CREAT|os.O_APPEND|os.O_WRONLY,0o600);os.close(fd)
     agent=Path.home()/'Library/LaunchAgents'/f'{LABEL}.plist';agent.parent.mkdir(parents=True,exist_ok=True)
-    configuration={'Label':LABEL,'ProgramArguments':[PYTHON,str(ROOT/'mac_application_worker.py')],'WorkingDirectory':str(ROOT),'RunAtLoad':True,'StartInterval':60,'ProcessType':'Background','StandardOutPath':str(logs/'stdout.log'),'StandardErrorPath':str(logs/'stderr.log')}
-    agent.write_bytes(plistlib.dumps(configuration));agent.chmod(0o600)
-    domain='gui/'+str(os.getuid())
+    config={'Label':LABEL,'ProgramArguments':[PYTHON,str(target/'mac_application_worker.py')],'WorkingDirectory':str(target),'RunAtLoad':True,'StartInterval':60,'ProcessType':'Background','StandardOutPath':str(logs/'stdout.log'),'StandardErrorPath':str(logs/'stderr.log')}
+    agent.write_bytes(plistlib.dumps(config));agent.chmod(0o600);domain='gui/'+str(os.getuid())
     subprocess.run(['launchctl','bootout',domain,str(agent)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     subprocess.run(['launchctl','bootstrap',domain,str(agent)],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     subprocess.run(['launchctl','print',domain+'/'+LABEL],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-    print('HUNT Mac-awake worker installed: checks every 60 seconds; standing authorization active; no credentials stored in startup configuration.')
+    print('HUNT worker installed in private Application Support storage. Checks every 60 seconds while this Mac is awake. No credentials printed or stored in the startup plist.')

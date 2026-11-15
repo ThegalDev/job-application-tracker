@@ -26,6 +26,12 @@ BASE='https://hunt-aminat.netlify.app'
 LEVER_HOSTS={'jobs.lever.co','jobs.eu.lever.co'}
 
 
+def load_owner_key(root=ROOT):
+    root=Path(root);private=root/'data/owner-connection.json'
+    if private.exists():return json.loads(private.read_text())['owner_key']
+    return next((line.partition('=')[2].strip().strip('\"\'') for line in (root.parent.parent/'work/netlify-runtime.env').read_text().splitlines() if line.partition('=')[0].strip()=='HUNT_OWNER_KEY'),None)
+
+
 def lever_url(url):
     u=urlsplit(url)
     if u.scheme!='https' or u.hostname not in LEVER_HOSTS or u.username or u.password or u.port or u.query or u.fragment or not re.fullmatch(r'/[A-Za-z0-9_-]+/[a-f0-9-]{36}(?:/apply)?/?',u.path):

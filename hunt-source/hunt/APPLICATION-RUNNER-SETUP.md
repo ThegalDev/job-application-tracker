@@ -1,48 +1,21 @@
-# Application runner setup
+# Mac application worker
 
-The desktop runner connects HUNT's exact reviewed Word CV to the application execution ledger and a public Lever form adapter. It is not an enabled autonomous cloud service. No real application has been submitted during verification.
+The owner authorized automatic submissions under standing instructions on 15 November 2026. Per-application owner approval is not required. Internal exact-plan hashes still bind the actual CV, form and answers to each execution.
 
-## What is connected
+The Mac login agent `com.hunt.application-worker` checks every 60 seconds while the user is logged in and the Mac is awake. The private runtime is in `~/Library/Application Support/HUNT/application-worker`; credentials are kept in owner-only private files, not in the LaunchAgent plist or Git. The installer copies only the required runtime code and verified CV source. Use HUNT’s existing Pause control to stop new agent actions.
 
-- Owner-only `/api/application-context` supplies the selected job, package and document version without returning the full workspace.
-- The downloaded CV must match both the package identity and document SHA-256. Files and review records are private on disk.
-- A plan binds the complete inspected form, verified answers, attachment hashes and job/package versions.
-- Approval and execution recheck pause, hidden status, current master CV, writing profile, job version, 48-hour freshness, remote eligibility, USD 2,500 monthly floor and duplicate application history.
-- Before the final click, the browser reads back every filled answer and file hash again. A changed answer/file blocks submission.
-- Inspection cannot POST application data. Filling cannot POST to the final application endpoint. Visible CAPTCHA/security challenges stop the adapter.
-- Submission needs explicit positive employer confirmation. Interrupted or uncertain attempts are not automatically retried.
+## What runs automatically
 
-## Current limits
+The worker considers current priority Lever roles that pass the 48-hour original publication, Nigeria/worldwide remote eligibility, verified USD 2,500 monthly pay, priority score, hidden employer/role and duplicate checks. It can request HUNT’s existing tailored draft pipeline, download the exact Word CV, inspect the form, and fill only facts verifiable from the current source CV. Only direct name, email and phone fields are currently automatically mapped. Required unknown answers, ambiguous resume fields, security challenges and unsupported forms pause that role without guessing.
 
-Only public Lever forms are supported. Greenhouse, Ashby and other providers are not implemented. Employer-page loading has not passed live verification on this Mac. There is no scheduled autonomous submission, cloud browser connection, owner web approval screen, or confirmed-form receipt reconciliation into the hosted tracker yet. Existing manual application and tracker actions remain available.
+Standing authorization is rechecked before approval and during execution. Revocation or a changed CV/answer/form stops the final submission. An uncertain attempt cannot automatically submit again. A durable local journal prevents repeatedly drafting or inspecting the same blocked job version.
 
-## Desktop commands
+A positive employer confirmation is stored locally before publication to HUNT. Receipt publication has a separate durable outbox so network retry cannot resubmit the employer application. Hosted Applications shows an Employer confirmation section; Google tracker writes remain idempotent. An on-page receipt is explicitly separate from an employer email. Test receipts are rejected by the real receipt importer.
 
-Run from the HUNT folder. Existing private owner credentials are read in memory from the same local HUNT runtime file; do not paste secrets into CLI arguments or chat. The runner uses the installed Playwright/Chrome runtime when available.
+## Limits and evidence
 
-```sh
-python3 application_runner.py inspect --job-id JOB_ID --package-id PACKAGE_ID
-python3 application_runner.py plan --job-id JOB_ID --package-id PACKAGE_ID --answers-file PRIVATE_ANSWERS_JSON
-python3 application_runner.py show --plan-id PLAN_ID
-python3 application_runner.py approve --plan-id PLAN_ID --expected-hash EXACT_PLAN_HASH --actor OWNER_IDENTITY
-python3 application_runner.py execute --plan-id PLAN_ID
-```
+Only public Lever forms are supported. Greenhouse and Ashby adapters are not implemented. Real employer-page loading has not passed verification on this Mac; therefore no real submission is claimed. The standing-authorization end-to-end check submitted once to a controlled local form, verified exact file bytes, captured a confirmation and prevented duplicate submission. Its clearly labeled JSON and screenshot are in `artifacts/tailored-cv-sample` and no email was sent.
 
-`inspect` only reads a form and saves a private review file. `plan` reads the form, downloads the exact CV, and saves a review or needs-input plan without filling the employer form. `approve` authorizes the exact plan for a bounded period. `execute` can disclose approved answers/upload files and submit; run it only after reviewing and approving that exact application.
+The supplied CV sample uses the actual CV assembly/Word export path with a source-grounded demonstration summary. It demonstrates preservation and document generation, not a new model-generated employer application. See its changes.md for exact scope.
 
-The answers file maps inspected question IDs to explicit evidence-backed answers, and selects the inspected resume upload field. Do not guess work authorization, sponsorship, compensation, demographic answers or consent.
-
-```json
-{
-  "cv_question_id": "id:resume",
-  "answers": {
-    "id:name": {"value": "OWNER_CONFIRMED_NAME", "source": "owner_answer", "verified": true}
-  }
-}
-```
-
-These are illustrative placeholders, not application-ready values. An unknown required field keeps the plan in `needs_input`.
-
-## Verification
-
-The actual isolated Chrome test submitted once to a controlled loopback fixture, matched the exact approved file hash, observed a confirmation receipt, and proved that replay cannot submit twice. The production DOM extractor passed against controlled HTML, including hidden resume inputs and security challenges. These fixture results do not prove a real employer submission.
+The earlier CLI inspect/plan/show/approve/execute commands remain diagnostic/manual tools. The installed worker uses standing authorization, not per-application human approval.
