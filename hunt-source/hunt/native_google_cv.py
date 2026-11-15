@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 import time
 from pathlib import Path
 from urllib.parse import urlencode
@@ -90,6 +91,16 @@ class NativeGoogleCV:
                 if attempt:raise
                 time.sleep(.5)
         self.token=token['access_token']
+    def _curl_read(self,url,headers):
+        # Read-only fallback for intermittent Python TLS disconnects. Secrets
+        # travel through stdin, never argv, environment or diagnostic output.
+        quote=lambda s:'"'+s.replace('\\','\\\\').replace('"','\\"').replace('\n','\\n').replace('\r','\\r')+'"'
+        config='url = '+quote(url)+'\n'+''.join('header = '+quote(k+': '+v)+'\n' for k,v in headers.items())
+        result=subprocess.run(['/usr/bin/curl','--config','-','--compressed','--silent','--max-time','30','--max-filesize','10485760','--proto','=https','--write-out','\n%{http_code}'],input=config.encode(),capture_output=True,timeout=35)
+        if result.returncode:raise ValueError('Google read transport did not complete')
+        raw,separator,status=result.stdout.rpartition(b'\n')
+        if not separator or status!=b'200' or len(raw)>10*1024*1024:raise ValueError('Google read was not confirmed')
+        return raw
     def call(self,url,body=None,binary=False):
         if not url.startswith(('https://docs.googleapis.com/v1/documents/','https://www.googleapis.com/drive/v3/files/')):raise ValueError('Google CV API endpoint denied')
         headers={'Authorization':'Bearer '+self.token}
@@ -99,7 +110,9 @@ class NativeGoogleCV:
                 with self.opener.open(Request(url,headers=headers,data=json.dumps(body).encode() if body is not None else None),timeout=60) as response:raw=response.read(10*1024*1024+1)
                 break
             except URLError:
-                if body is not None or attempt:raise
+                if body is not None:raise
+                if attempt:
+                    raw=self._curl_read(url,headers);break
                 time.sleep(.5)
         if len(raw)>10*1024*1024:raise ValueError('Native document exceeds bounded export')
         return raw if binary else json.loads(raw)
@@ -131,6 +144,7 @@ class NativeGoogleCV:
         if self.master()['revisionId']!=source['revisionId']:raise ValueError('Master changed during drafting; start from fresh source')
         copied=self.call('https://www.googleapis.com/drive/v3/files/'+MASTER+'/copy?fields=id,webViewLink',{'name':title[:200]});id=copied['id']
         if id==MASTER:raise ValueError('Master cannot be the edit target')
+        private_json(self.root/'data/native-cv-in-progress.json',{'document_id':id,'document_url':copied.get('webViewLink'),'source_revision':source['revisionId'],'validation_version':4,'state':'copy_created'})
         doc=self.get(id);tab,_,rows=paragraphs(doc);requests=[]
         for i in sorted(edits,reverse=True):
             p=expected[i];old=p['text'];new=edits[i]
@@ -151,6 +165,13 @@ class NativeGoogleCV:
             if i not in expected and text(row)!=text(original[i]):raise ValueError('Protected source paragraph changed')
         # Keep project headings/stacks and short labelled blocks with their
         # following content so rewritten text cannot orphan a project title.
+        in_experience=False
+        for row in rows:
+            plain=text(row).strip()
+            if plain=='PROFESSIONAL EXPERIENCE':in_experience=True
+            if plain=='EDUCATION':in_experience=False
+            if in_experience and 'bullet' not in row['paragraph']:
+                styles.append({'updateParagraphStyle':{'range':{'tabId':tab,'startIndex':row['startIndex'],'endIndex':row['endIndex']},'paragraphStyle':{'keepWithNext':True},'fields':'keepWithNext'}})
         in_projects=False
         for i,row in enumerate(rows):
             plain=text(row).strip()
@@ -168,19 +189,19 @@ class NativeGoogleCV:
         fd=os.open(path,os.O_CREAT|os.O_TRUNC|os.O_WRONLY,0o600)
         with os.fdopen(fd,'wb') as out:out.write(pdf)
         _,_,final_rows=paragraphs(final)
-        report={'tailored_text':'\n'.join(text(row) for row in final_rows)+'\n','validation_version':3,'source_doc_id':MASTER,'source_revision':source['revisionId'],'document_id':id,'document_url':copied.get('webViewLink'),'document_revision':final['revisionId'],'sha256':sha,'bytes':len(pdf),'qa':signature(final),'master_unchanged':True,'paragraphs_reviewed':len(expected)}
+        report={'tailored_text':'\n'.join(text(row) for row in final_rows)+'\n','validation_version':4,'source_doc_id':MASTER,'source_revision':source['revisionId'],'document_id':id,'document_url':copied.get('webViewLink'),'document_revision':final['revisionId'],'sha256':sha,'bytes':len(pdf),'qa':signature(final),'master_unchanged':True,'paragraphs_reviewed':len(expected)}
         private_json(path.with_suffix('.json'),report)
         return path,report
 
 def prepare_native_package(client,package_id,root):
     google=NativeGoogleCV(root);source=google.master();plan=mapping(source)
     package=client.request('/api/package?'+urlencode({'id':package_id}))
-    if package.get('native_cv') and package['native_cv'].get('validation_version')==3 and package['native_cv']['source_revision']==source['revisionId']:
+    if package.get('native_cv') and package['native_cv'].get('validation_version')==4 and package['native_cv']['source_revision']==source['revisionId']:
         _,_,rows=paragraphs(source);master_text='\n'.join(text(row) for row in rows)+'\n'
         target=Path(root)/'data/master-cv.txt';fd=os.open(target,os.O_CREAT|os.O_TRUNC|os.O_WRONLY,0o600)
         with os.fdopen(fd,'w') as out:out.write(master_text)
         return package
-    task=client.request('/api/native-cv-draft',body={'job_id':package['job_id'],'validation_version':3,'source_doc_id':MASTER,'source_revision':source['revisionId'],'paragraphs':plan})
+    task=client.request('/api/native-cv-draft',body={'job_id':package['job_id'],'validation_version':4,'source_doc_id':MASTER,'source_revision':source['revisionId'],'paragraphs':plan})
     task=client.request('/api/native-cv-draft?'+urlencode({'id':task['id']}));private_json(Path(root)/'data/native-cv-task.json',task)
     deadline=time.monotonic()+570
     while task['status'] in ('queued','running') and time.monotonic()<deadline:
