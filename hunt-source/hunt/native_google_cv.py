@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlencode
 from urllib.request import Request, build_opener
+from urllib.error import URLError
 from application_runner import NoRedirect
 
 MASTER='1u9NQcSpOF1jRwHUmN-LeKZTWazENUoQjvYV8xzkLsGQ'
@@ -68,13 +69,25 @@ class NativeGoogleCV:
         if grant.get('account')!=ACCOUNT or not SCOPES.issubset(grant.get('scopes',[])):raise ValueError('Dedicated native CV grant is required')
         payload=urlencode({k:grant[k] for k in ('client_id','client_secret','refresh_token')}|{'grant_type':'refresh_token'}).encode()
         self.opener=build_opener(NoRedirect)
-        with self.opener.open(Request('https://oauth2.googleapis.com/token',data=payload),timeout=30) as response:token=json.load(response)
+        for attempt in range(2):
+            try:
+                with self.opener.open(Request('https://oauth2.googleapis.com/token',data=payload),timeout=30) as response:token=json.load(response)
+                break
+            except URLError:
+                if attempt:raise
+                time.sleep(.5)
         self.token=token['access_token']
     def call(self,url,body=None,binary=False):
         if not url.startswith(('https://docs.googleapis.com/v1/documents/','https://www.googleapis.com/drive/v3/files/')):raise ValueError('Google CV API endpoint denied')
         headers={'Authorization':'Bearer '+self.token}
         if body is not None:headers['Content-Type']='application/json'
-        with self.opener.open(Request(url,headers=headers,data=json.dumps(body).encode() if body is not None else None),timeout=60) as response:raw=response.read(10*1024*1024+1)
+        for attempt in range(2 if body is None else 1):
+            try:
+                with self.opener.open(Request(url,headers=headers,data=json.dumps(body).encode() if body is not None else None),timeout=60) as response:raw=response.read(10*1024*1024+1)
+                break
+            except URLError:
+                if body is not None or attempt:raise
+                time.sleep(.5)
         if len(raw)>10*1024*1024:raise ValueError('Native document exceeds bounded export')
         return raw if binary else json.loads(raw)
     def get(self,id):return self.call('https://docs.googleapis.com/v1/documents/'+id+'?includeTabsContent=true')
@@ -86,7 +99,7 @@ class NativeGoogleCV:
         for i,new in edits.items():
             old=expected[i]['text']
             if not isinstance(new,str) or not new.strip() or re.search(r'[\n\r\v]',new):raise ValueError('Paragraph boundaries may not change')
-            nums=lambda s:{n.replace(',','') for n in re.findall(r'\d+(?:[,.]\d+)*',s)}
+            nums=lambda s:{n.replace(',','') for n in re.findall(r'\b\d+(?:[,.]\d+)*\b',s)}
             allowed=nums(' '.join(p['text'] for p in plan)) if expected[i]['kind']=='summary' else nums(old)
             if nums(new)-allowed or expected[i]['kind'] not in ('summary','headline') and nums(old)-nums(new):raise ValueError('Source metrics changed')
             if expected[i]['kind']=='bullet' and len(new.split())<len(old.split())*.9:raise ValueError('Source bullet shortened')

@@ -12,6 +12,8 @@ test('complete native mapping preserves paragraph boundaries, metrics and protec
  assert.deepEqual(validateNativeRewrites(source,{replacements:[{id:1,text:'Maintained accurate records for 1,000 employees.'}]}).replacements.length,1);
  for(const text of ['Managed records for 5,000 employees.','Managed records.','Managed\nrecords for 1,000 employees.'])assert.throws(()=>validateNativeRewrites(source,{replacements:[{id:1,text}]}));
  assert.throws(()=>validateNativeRewrites(source,{replacements:[]}));assert.throws(()=>validateNativeRewrites(source,{replacements:[{id:1,text:source[0].text},{id:2,text:'Invented degree'}]}));
+ assert.doesNotThrow(()=>validateNativeRewrites([{id:1,text:'Built a practical recruitment assistant workflow.',editable:true,kind:'bullet'}],{replacements:[{id:1,text:'Built a practical recruitment assistant workflow using n8n.'}]}));
+ assert.doesNotThrow(()=>validateNativeRewrites(source,{replacements:[{id:1,text:'Maintained accurate records for 1000 employees.'}]}));
 });
 test('native draft reserves once and repeated background delivery does not call the model twice',async()=>{
  const BUCKET=new Bucket(),env={BUCKET,OPENAI_API_KEY:'fixture'},input={source_doc_id:'1u9NQcSpOF1jRwHUmN-LeKZTWazENUoQjvYV8xzkLsGQ',source_revision:'revision',paragraphs:[{id:1,text:'Maintained accurate employee records.',editable:true,kind:'bullet'}]};

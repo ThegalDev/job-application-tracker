@@ -7,15 +7,15 @@ export async function createNativeCVTask(bucket,body,job){
  if(body.source_doc_id!=='1u9NQcSpOF1jRwHUmN-LeKZTWazENUoQjvYV8xzkLsGQ'||typeof body.source_revision!=='string'||!Array.isArray(body.paragraphs)||!body.paragraphs.length||body.paragraphs.length>400)throw Error('Fresh authoritative master CV structure is required');
  const seen=new Set();for(const p of body.paragraphs){if(!Number.isInteger(p.id)||seen.has(p.id)||typeof p.text!=='string'||p.text.length>8000)throw Error('Invalid CV paragraph mapping');seen.add(p.id);}
  if(JSON.stringify(body.paragraphs).length>180000)throw Error('Master CV exceeds bounded native tailoring size');
- const input={drafting_version:2,source_doc_id:body.source_doc_id,source_revision:body.source_revision,paragraphs:body.paragraphs,job:{id:job.id,version:job.raw_hash,title:job.title,company:job.company,description:job.description}},id=await hash(JSON.stringify(input)),key=PREFIX+id+'.json',prior=await read(bucket,key);if(prior)return {id,status:prior.status};
+ const input={drafting_version:2,source_doc_id:body.source_doc_id,source_revision:body.source_revision,paragraphs:body.paragraphs,job:{id:job.id,version:job.raw_hash,title:job.title,company:job.company,description:job.description}},id=await hash(JSON.stringify(input)),key=PREFIX+id+'.json',prior=await read(bucket,key);if(prior){if(prior.status==='failed'&&prior.candidate){try{validateNativeRewrites(prior.input.paragraphs,prior.candidate);const old=await bucket.get(key);const recovered={...prior,status:'completed',result:prior.candidate,error:null,recovered_without_model_call:true};if(await write(bucket,key,recovered,{onlyIf:{etagMatches:old.etag}}))return {id,status:'completed'};}catch{}}return {id,status:prior.status};}
  await write(bucket,key,{id,status:'queued',created_at:new Date().toISOString(),input},{onlyIf:{etagDoesNotMatch:'*'}});return {id,status:'queued'};
 }
-export async function nativeCVTask(bucket,id){if(!/^[a-f0-9]{64}$/.test(id||''))throw Error('Invalid CV task identity');const t=await read(bucket,PREFIX+id+'.json');return t?{id:t.id,status:t.status,result:t.result||null,error:t.error||null}:null;}
+export async function nativeCVTask(bucket,id){if(!/^[a-f0-9]{64}$/.test(id||''))throw Error('Invalid CV task identity');const t=await read(bucket,PREFIX+id+'.json');return t?{id:t.id,status:t.status,result:t.result||null,error:t.error||null,...(t.status==='failed'&&t.candidate?{failed_draft:t.candidate}:{})}:null;}
 export function validateNativeRewrites(paragraphs,result){
  if(!result||!Array.isArray(result.replacements))throw Error('Native CV output has no paragraph mapping');
  const expected=paragraphs.filter(p=>p.editable),map=new Map();for(const item of result.replacements){if(!Number.isInteger(item.id)||map.has(item.id)||typeof item.text!=='string'||!item.text.trim()||item.text.length>10000||/[\n\r\u000b]/.test(item.text))throw Error('Native CV output changes paragraph boundaries');map.set(item.id,item.text);}
  if(map.size!==expected.length||expected.some(p=>!map.has(p.id)))throw Error('Native CV output omitted or added a required paragraph');
- const numbers=t=>new Set((t.match(/\d+(?:[,.]\d+)*/g)||[]).map(n=>n.replaceAll(',',''))),allNumbers=numbers(paragraphs.map(p=>p.text).join(' '));
+ const numbers=t=>new Set((t.match(/\b\d+(?:[,.]\d+)*\b/g)||[]).map(n=>n.replaceAll(',',''))),allNumbers=numbers(paragraphs.map(p=>p.text).join(' '));
  const invalid=[];
  for(const p of expected){const text=map.get(p.id),supported=p.kind==='summary'?allNumbers:numbers(p.text);let reason;
   if([...numbers(text)].some(n=>!supported.has(n)))reason='introduced an unsupported metric';
