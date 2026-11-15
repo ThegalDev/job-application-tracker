@@ -465,7 +465,7 @@ export async function handle(req,env){
     if(path==='/api/application-candidates'&&req.method==='GET'){
       const snapshot=await mergedSnapshot(bucket),control=await read(bucket,CONTROL,{}),paused=control.paused??snapshot.paused??true;
       const candidates=snapshot.jobs.filter(j=>!j.hidden&&j.open&&j.within_discovery_window&&j.publication_verified_original&&j.global_remote&&['A','B'].includes(j.assessment?.tier)&&j.assessment.score>=85&&j.assessment.compensation?.status==='meets_floor'&&j.assessment.compensation.monthly_min>=2500&&!j.assessment.duplicate_applications?.length&&!j.assessment.duplicate_listing_of);
-      const rows=candidates.filter(j=>{try{const u=new URL(j.original_application_url||j.url);return ['jobs.lever.co','jobs.eu.lever.co'].includes(u.hostname)}catch{return false}}).map(j=>{const p=snapshot.packages.find(p=>p.job_id===j.id&&p.job_version===j.raw_hash&&p.full_cv_preserved&&p.status==='review'&&(!p.writing_profile_version||p.writing_profile_version===WRITING_PROFILE.version));return {job_id:j.id,job_version:j.raw_hash,package_id:p?.id||null};}).slice(0,5);
+      const rows=candidates.filter(j=>{try{const u=new URL(j.original_application_url||j.url);return ['jobs.lever.co','jobs.eu.lever.co'].includes(u.hostname)}catch{return false}}).map(j=>{const p=snapshot.packages.find(p=>p.job_id===j.id&&p.job_version===j.raw_hash&&p.full_cv_preserved&&p.status==='review'&&(!p.writing_profile_version||p.writing_profile_version===WRITING_PROFILE.version));return {job_id:j.id,job_version:j.raw_hash,package_id:p?.id||null};}).slice(0,100);
       return reply({paused,candidates:paused?[]:rows,eligible_before_provider_filter:candidates.length,supported_provider:'lever',heartbeat:await read(bucket,'hunt/runtime/desktop-runner.json')});
     }
     if(path==='/api/application-runner-status'&&req.method==='GET')return reply(await read(bucket,'hunt/runtime/desktop-runner.json',{status:'not_connected'}));
@@ -497,7 +497,7 @@ export async function handle(req,env){
     }
     if(path==='/api/application-runner-status'){
       const allowed=['idle','running','paused','needs_input','blocked','submitted','error'];if(!allowed.includes(body.status))throw Error('Unknown runner status');
-      const row={status:body.status,last_seen:new Date().toISOString(),mode:'this_mac_while_awake',standing_authorization:body.standing_authorization===true,eligible_candidates:Math.max(0,Math.min(5,Number(body.eligible_candidates)||0)),message:String(body.message||'').slice(0,300)};await write(bucket,'hunt/runtime/desktop-runner.json',row);return reply({ok:true});
+      const row={status:body.status,last_seen:new Date().toISOString(),mode:'this_mac_while_awake',standing_authorization:body.standing_authorization===true,eligible_candidates:Math.max(0,Math.min(100,Number(body.eligible_candidates)||0)),message:String(body.message||'').slice(0,300)};await write(bucket,'hunt/runtime/desktop-runner.json',row);return reply({ok:true});
     }
     if(path==='/api/applications/applied'){const [saved,cloud]=await Promise.all([read(bucket,SNAPSHOT),read(bucket,CLOUD_JOBS,{jobs:[]})]);const base=saved?.snapshot||{jobs:[],applications:[]};return reply(await recordApplied(bucket,body,{...base,jobs:[...(base.jobs||[]),...(cloud.jobs||[])]}));}
     if(path==='/api/tracker/connect')return reply(await connectTracker(bucket,body));

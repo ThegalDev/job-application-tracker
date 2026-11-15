@@ -80,7 +80,9 @@ def tick(root=ROOT):
         if scan['paused']:return report('paused','HUNT is paused. No applications will be attempted.')
         journal_path=directory/'autonomous-attempts.json';journal=json.loads(journal_path.read_text()) if journal_path.exists() else {}
         candidates=[c for c in scan['candidates'] if execution.fingerprint([c['job_id'],c.get('job_version')]) not in journal]
-        if not candidates:return report('idle','No qualifying priority Lever roles within your saved gates. No application was attempted.')
+        if not candidates:
+            if scan['candidates']:return report('needs_input','The saved candidate versions are paused or already attempted. No repeat application was attempted.')
+            return report('idle','No qualifying priority Lever roles within your saved gates. No application was attempted.')
         report('running','Checking one qualifying role.',len(candidates))
         try:
             result=process_candidate(client,candidates[0],engine,policy,root)

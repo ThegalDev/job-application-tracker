@@ -79,8 +79,8 @@
     },
     {
       "path": "hunt/cloud/server.mjs",
-      "bytes": 111710,
-      "sha256": "06080d3b0ed389e779b63d45ef6e14bd6aa905df16cafbf9c7617e1c7149f778"
+      "bytes": 111714,
+      "sha256": "24483aa38b29971513fcb12743dfe72b0593330b073efab2261346391073b144"
     },
     {
       "path": "hunt/cloud/test_action_controls.mjs",
@@ -224,8 +224,8 @@
     },
     {
       "path": "hunt/mac_application_worker.py",
-      "bytes": 7604,
-      "sha256": "2211324649fe8e3addf79874c1149289352e2b6ee0ea0e6202f91c22a8c45696"
+      "bytes": 7781,
+      "sha256": "c7e68acb53661a3c00acb77bc4e980d89503a09706eadfaaa1a6e1cd221a62d1"
     },
     {
       "path": "hunt/matching.py",
