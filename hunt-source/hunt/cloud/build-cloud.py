@@ -11,8 +11,10 @@ profile=json.loads((ROOT.parent/'writing-profile.json').read_text())
 instructions=(ROOT.parent/'drafting-instructions.txt').read_text()
 notification_source=(ROOT/'notifications.mjs').read_text().replace('export ','')
 notification_prelude='const {notificationStatus,connectNotifications,notifyRun}=(()=>{'+notification_source+';return {notificationStatus,connectNotifications,notifyRun};})();\n'
-server_source=(ROOT/'server.mjs').read_text().replace("import {notificationStatus,connectNotifications,notifyRun} from './notifications.mjs';\n",'')
-source=notification_prelude+'const DRAFTING_INSTRUCTIONS='+json.dumps(instructions,ensure_ascii=False)+';\n'+'const WRITING_PROFILE='+json.dumps(profile,ensure_ascii=False)+';\n'+'const ASSETS='+json.dumps(assets,ensure_ascii=False)+';\n'+server_source
+visibility_source=(ROOT/'visibility.mjs').read_text().replace('export ','')
+visibility_prelude='const {visibilitySettings,jobVisibility,updateVisibility}=(()=>{'+visibility_source+';return {visibilitySettings,jobVisibility,updateVisibility};})();\n'
+server_source=(ROOT/'server.mjs').read_text().replace("import {visibilitySettings,jobVisibility,updateVisibility} from './visibility.mjs';\n",'').replace("import {notificationStatus,connectNotifications,notifyRun} from './notifications.mjs';\n",'')
+source=visibility_prelude+notification_prelude+'const DRAFTING_INSTRUCTIONS='+json.dumps(instructions,ensure_ascii=False)+';\n'+'const WRITING_PROFILE='+json.dumps(profile,ensure_ascii=False)+';\n'+'const ASSETS='+json.dumps(assets,ensure_ascii=False)+';\n'+server_source
 out=ROOT/'dist/server/index.js';out.parent.mkdir(parents=True,exist_ok=True);out.write_text(source)
 manifest=ROOT/'.openai/hosting.json'
 config=json.loads(manifest.read_text());config['r2']='BUCKET';config['d1']=None;config.pop('static',None)

@@ -12,6 +12,8 @@ const profile=JSON.parse(await readFile(new URL('writing-profile.json',source),'
 const instructions=await readFile(new URL('drafting-instructions.txt',source),'utf8');
 const notifications=(await readFile(new URL('cloud/notifications.mjs',source),'utf8')).replaceAll('export ','');
 const notificationPrelude='const {notificationStatus,connectNotifications,notifyRun}=(()=>{'+notifications+';return {notificationStatus,connectNotifications,notifyRun};})();\n';
-const server=(await readFile(new URL('cloud/server.mjs',source),'utf8')).replace("import {notificationStatus,connectNotifications,notifyRun} from './notifications.mjs';\n",'');
-await writeFile(new URL('runtime/worker.mjs',root),notificationPrelude+'const ASSETS='+JSON.stringify(assets)+';\nconst WRITING_PROFILE='+JSON.stringify(profile)+';\nconst DRAFTING_INSTRUCTIONS='+JSON.stringify(instructions)+';\n'+server);
+const visibility=(await readFile(new URL('cloud/visibility.mjs',source),'utf8')).replaceAll('export ','');
+const visibilityPrelude='const {visibilitySettings,jobVisibility,updateVisibility}=(()=>{'+visibility+';return {visibilitySettings,jobVisibility,updateVisibility};})();\n';
+const server=(await readFile(new URL('cloud/server.mjs',source),'utf8')).replace("import {visibilitySettings,jobVisibility,updateVisibility} from './visibility.mjs';\n",'').replace("import {notificationStatus,connectNotifications,notifyRun} from './notifications.mjs';\n",'');
+await writeFile(new URL('runtime/worker.mjs',root),visibilityPrelude+notificationPrelude+'const ASSETS='+JSON.stringify(assets)+';\nconst WRITING_PROFILE='+JSON.stringify(profile)+';\nconst DRAFTING_INSTRUCTIONS='+JSON.stringify(instructions)+';\n'+server);
 console.log('Built Netlify assets and backend; no keys, CV files or local database bundled.');
