@@ -1,5 +1,6 @@
 import {createHmac,timingSafeEqual,randomBytes} from 'node:crypto';
 import {handle} from '../../runtime/worker.mjs';
+import {dispatchDiscovery} from '../../runtime/discovery-tasks.mjs';
 import {environment} from '../../runtime/environment.mjs';
 const same=(a,b)=>typeof a==='string'&&typeof b==='string'&&a.length===b.length&&timingSafeEqual(Buffer.from(a),Buffer.from(b));
 const sign=(value,key)=>createHmac('sha256',key).update(value).digest('hex');
@@ -23,7 +24,7 @@ export default async function(request){
   // Never trust browser-supplied platform identity headers on a new host.
   headers.delete('oai-authenticated-user-id');
   if(ownerSession(request,ownerKey)||ownerKey&&same(headers.get('X-HUNT-Owner-Key'),ownerKey))headers.set('oai-authenticated-user-id','netlify-owner');
-  try{return await handle(new Request(request,{headers}),await environment());}
+  try{const env=await environment();env.dispatchDiscovery=id=>dispatchDiscovery(env,id,new URL(request.url).origin,process.env.HUNT_SERVICE_KEY||'');return await handle(new Request(request,{headers}),env);}
   catch(error){return Response.json({error:'HUNT could not load its Netlify storage. No operation is confirmed.'},{status:503,headers:{'Cache-Control':'no-store'}});}
 }
 export const config={path:'/api/*'};

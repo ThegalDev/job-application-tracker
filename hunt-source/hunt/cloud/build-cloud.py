@@ -9,7 +9,10 @@ assets={path:(WEB/name).read_text() for path,name in [('/','index.html'),('/app.
 assets['/']=assets['/'].replace('● Private · on this computer','● Private · phone review console')
 profile=json.loads((ROOT.parent/'writing-profile.json').read_text())
 instructions=(ROOT.parent/'drafting-instructions.txt').read_text()
-source='const DRAFTING_INSTRUCTIONS='+json.dumps(instructions,ensure_ascii=False)+';\n'+'const WRITING_PROFILE='+json.dumps(profile,ensure_ascii=False)+';\n'+'const ASSETS='+json.dumps(assets,ensure_ascii=False)+';\n'+(ROOT/'server.mjs').read_text()
+notification_source=(ROOT/'notifications.mjs').read_text().replace('export ','')
+notification_prelude='const {notificationStatus,connectNotifications,notifyRun}=(()=>{'+notification_source+';return {notificationStatus,connectNotifications,notifyRun};})();\n'
+server_source=(ROOT/'server.mjs').read_text().replace("import {notificationStatus,connectNotifications,notifyRun} from './notifications.mjs';\n",'')
+source=notification_prelude+'const DRAFTING_INSTRUCTIONS='+json.dumps(instructions,ensure_ascii=False)+';\n'+'const WRITING_PROFILE='+json.dumps(profile,ensure_ascii=False)+';\n'+'const ASSETS='+json.dumps(assets,ensure_ascii=False)+';\n'+server_source
 out=ROOT/'dist/server/index.js';out.parent.mkdir(parents=True,exist_ok=True);out.write_text(source)
 manifest=ROOT/'.openai/hosting.json'
 config=json.loads(manifest.read_text());config['r2']='BUCKET';config['d1']=None;config.pop('static',None)

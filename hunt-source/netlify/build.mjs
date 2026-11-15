@@ -10,6 +10,8 @@ for(const [path,name] of [['/','index.html'],['/app.js','app.js'],['/style.css',
 }
 const profile=JSON.parse(await readFile(new URL('writing-profile.json',source),'utf8'));
 const instructions=await readFile(new URL('drafting-instructions.txt',source),'utf8');
-const server=await readFile(new URL('cloud/server.mjs',source),'utf8');
-await writeFile(new URL('runtime/worker.mjs',root),'const ASSETS='+JSON.stringify(assets)+';\nconst WRITING_PROFILE='+JSON.stringify(profile)+';\nconst DRAFTING_INSTRUCTIONS='+JSON.stringify(instructions)+';\n'+server);
+const notifications=(await readFile(new URL('cloud/notifications.mjs',source),'utf8')).replaceAll('export ','');
+const notificationPrelude='const {notificationStatus,connectNotifications,notifyRun}=(()=>{'+notifications+';return {notificationStatus,connectNotifications,notifyRun};})();\n';
+const server=(await readFile(new URL('cloud/server.mjs',source),'utf8')).replace("import {notificationStatus,connectNotifications,notifyRun} from './notifications.mjs';\n",'');
+await writeFile(new URL('runtime/worker.mjs',root),notificationPrelude+'const ASSETS='+JSON.stringify(assets)+';\nconst WRITING_PROFILE='+JSON.stringify(profile)+';\nconst DRAFTING_INSTRUCTIONS='+JSON.stringify(instructions)+';\n'+server);
 console.log('Built Netlify assets and backend; no keys, CV files or local database bundled.');
