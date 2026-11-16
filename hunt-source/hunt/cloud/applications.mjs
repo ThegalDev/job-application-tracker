@@ -72,13 +72,32 @@ export async function syncTracker(bucket,id,fetcher=fetch){
  }catch(error){const uncertain=attempted&&!(error.http_status>=400&&error.http_status<500);return save({status:uncertain?'uncertain':'failed',reason:uncertain?'Tracker write outcome is unconfirmed; retry checks for the existing row before any further write':'Tracker update was not accepted. Check the connection and tracker schema.'});}
  finally{const lock=await read(bucket,lockKey);if(lock?.owner===owner)await bucket.delete(lockKey);}
 }
+// Only an authenticated runner may attest the employer link resolved from a
+// saved aggregator listing. Retain that provenance with the actual receipt.
+export function confirmedEmployerURL(job,body){
+ const listing=new URL(job.original_application_url||job.url);let original=listing;
+ const resolution=body.application_resolution;
+ if(resolution){
+  if(listing.hostname!=='startup.jobs'||resolution.listing_url!==listing.href||resolution.company!==job.company||resolution.role!==job.title||resolution.verified_by!=='owner_desktop_employer_board')throw Error('Employer-link resolution does not match the saved listing');
+  original=new URL(resolution.employer_url);
+  if(original.hostname!==norm(job.company).replaceAll(' ','-')+'.breezy.hr')throw Error('Resolved employer does not match the selected company');
+ }
+ const evidence=new URL(body.receipt.evidence_url);
+ if(original.protocol!=='https:'||original.username||original.password||original.port||evidence.origin!==original.origin||evidence.username||evidence.password||evidence.port)throw Error('Confirmation evidence is outside the selected employer provider');
+ if(['jobs.lever.co','jobs.eu.lever.co'].includes(original.hostname))return original;
+ if(!/^[-a-z0-9]+\.breezy\.hr$/.test(original.hostname)||original.hostname==='app.breezy.hr'||original.search||original.hash||!/^\/p\/[a-f0-9]{12}-[-a-z0-9]+(?:\/apply)?$/.test(original.pathname))throw Error('Unsupported employer confirmation provider');
+ const position=original.pathname.replace(/\/apply$/,'');
+ if(evidence.pathname!==position+'/apply/submitted'||evidence.search||evidence.hash)throw Error('Confirmation is for a different employer position');
+ return original;
+}
 // Private desktop-observed receipt, distinct from an employer email.
 export async function recordConfirmedApplication(bucket,body,snapshot,fetcher=fetch){
  const job=snapshot.jobs.find(j=>j.id===body.job_id),p=snapshot.packages.find(p=>p.id===body.package_id),r=body.receipt;
  if(!job||!p||p.job_id!==job.id||p.payload_hash!==body.package_hash)throw Error('Application receipt does not match the job and package');
  if(!r||r.fixture_only||r.submitted!==true||typeof r.confirmation_id!=='string'||r.confirmation_id.length>150||r.evidence_kind!=='confirmation_page'||typeof r.confirmation_text!=='string'||r.confirmation_text.length>2000||!/(?:application (?:has been|was) (?:successfully )?(?:submitted|received)|application submitted|thanks for applying|thank you for applying)/i.test(r.confirmation_text))throw Error('Positive production employer confirmation is required');
- const original=new URL(job.original_application_url||job.url),evidence=new URL(r.evidence_url);if(original.protocol!=='https:'||!['jobs.lever.co','jobs.eu.lever.co'].includes(original.hostname)||evidence.origin!==original.origin||evidence.username||evidence.password)throw Error('Confirmation evidence is outside the selected employer provider');
+ const original=confirmedEmployerURL(job,body),evidence=new URL(r.evidence_url);
  const id=await appId(job),key=PREFIX+id+'.json',prior=await read(bucket,key);if(prior?.submission_receipt&&prior.submission_receipt.confirmation_id!==r.confirmation_id)throw Error('A different submission receipt already exists; reconcile before replacing it');
  const row={...prior,id,job_id:job.id,company:job.company,role:job.title,applied:prior?.applied||new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Lagos'}),status:'Application acknowledged',latest:new Date().toISOString(),evidence:evidence.href,posting_url:original.href,recorded_by:'hunt_runner',employer_acknowledged:true,employer_form_submitted_by_hunt:true,removed_at:null,submission_receipt:{confirmation_id:r.confirmation_id,evidence_kind:r.evidence_kind,evidence_url:evidence.href,confirmation_text:r.confirmation_text,verification_mode:'owner_desktop_observed_confirmation',email_verified:false,package_id:p.id,package_hash:p.payload_hash,cv_sha256:body.cv_sha256},notes:'HUNT observed an employer form confirmation. This is not a verified employer email.',tracker_sync:prior?.tracker_sync||{status:'pending'}};
+ if(body.application_resolution)row.application_resolution=body.application_resolution;
  await write(bucket,key,row);return {application:row,tracker_sync:await syncTracker(bucket,id,fetcher)};
 }
