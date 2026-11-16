@@ -128,11 +128,11 @@ class NativeGoogleCV:
             edits[i]=new
         if len(edits)!=len(replacements) or edits.keys()!=expected.keys():raise ValueError('All native paragraphs must be reviewed exactly once')
         source_text=' '.join(p['text'] for p in plan)
-        unsupported_scopes=[term for term in ['sales','marketing','G&A','go-to-market','GTM'] if not re.search(r'\b'+re.escape(term)+r'\b',source_text,re.I)]
+        unsupported_scopes=[term for term in ['sales','marketing','G&A','go-to-market','GTM','executive','C-suite','DEI','DEIB','diversity, equity, inclusion','crisis','culture transformation','organizational transformation','organizational design','collective bargaining','union negotiations','FMLA','ERISA','EEOC','GDPR'] if not re.search(r'\b'+re.escape(term)+r'\b',source_text,re.I)]
         versions=project_tool_versions(plan)
         for i,new in edits.items():
             old=expected[i]['text']
-            if expected[i]['kind']!='headline' and any(re.search(r'\b'+re.escape(term)+r'\b',new,re.I) for term in unsupported_scopes):raise ValueError('Unsourced hiring department in native CV')
+            if any(re.search(r'\b'+re.escape(term)+r'\b',new,re.I) for term in unsupported_scopes):raise ValueError('Unsourced hiring department in native CV')
             if not isinstance(new,str) or not new.strip() or re.search(r'[\n\r\v]',new):raise ValueError('Paragraph boundaries may not change')
             nums=lambda s:{n.replace(',','') for n in re.findall(r'\b\d+(?:[,.]\d+)*\b',s)}
             allowed=nums(' '.join(p['text'] for p in plan)) if expected[i]['kind']=='summary' else nums(old)

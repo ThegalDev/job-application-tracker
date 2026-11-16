@@ -17,7 +17,7 @@ test('complete native mapping preserves paragraph boundaries, metrics and protec
  const project=[{id:0,text:'PROJECTS',editable:false},{id:1,text:'Culture project',editable:false},{id:2,text:'Tech Stack: Next.js 14, TypeScript, React',editable:false},{id:3,text:'Built a useful culture platform for HR teams.',kind:'bullet',editable:true}];
  assert.doesNotThrow(()=>validateNativeRewrites(project,{replacements:[{id:3,text:'Built a useful culture platform for HR teams using Next.js 14.'}]}));
  assert.throws(()=>validateNativeRewrites(project,{replacements:[{id:3,text:'Built a useful culture platform serving 14 HR teams.'}]}));
- assert.throws(()=>validateNativeRewrites([{id:1,text:'Managed HR operations and full-cycle recruitment.',kind:'bullet',editable:true}],{replacements:[{id:1,text:'Managed HR operations and full-cycle recruitment for Sales and Marketing.'}]}),/unsourced department/);
+ assert.throws(()=>validateNativeRewrites([{id:1,text:'Managed HR operations and full-cycle recruitment.',kind:'bullet',editable:true}],{replacements:[{id:1,text:'Managed HR operations and full-cycle recruitment for Sales and Marketing.'}]}),/unsourced/);
  const labelled={replacements:[{id:1,text:'Recruitment Systems: Workable and HireFlix.'}]};validateNativeRewrites([{id:1,text:'Workable and HireFlix.',prefix:'Recruitment Systems:',kind:'bullet',editable:true}],labelled);assert.equal(labelled.replacements[0].text,'Workable and HireFlix.');
 });
 test('native draft reserves once and repeated background delivery does not call the model twice',async()=>{
