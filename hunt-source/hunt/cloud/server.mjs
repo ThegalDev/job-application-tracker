@@ -506,7 +506,7 @@ export async function handle(req,env){
     if(!csrf(req))return reply({error:'Origin or CSRF denied',code:'CSRF_TOKEN_MISMATCH'},403);
     const body=await jsonBody(req);let type,payload;
     if(path==='/api/application-attempt'){
-      const allowed=['submitted','email_sent','security_blocked','unreachable','closed','unsupported_form','missing_facts','unconfirmed','error'];
+      const allowed=['submitted','email_sent','security_blocked','unreachable','closed','unsupported_form','missing_facts','unconfirmed','error','awaiting_authorization'];
       if(!/^[a-f0-9]{64}$/.test(body.id||'')||!allowed.includes(body.status)||typeof body.job_id!=='string'||sensitive(body))throw Error('Invalid application outcome');
       const snapshot=await mergedSnapshot(bucket),job=snapshot.jobs.find(j=>j.id===body.job_id);if(!job)throw Error('Unknown application job');
       const row={id:body.id,job_id:job.id,job_version:body.job_version,status:body.status,company:job.company,role:job.title,at:new Date().toISOString(),message:String(body.message||'').slice(0,500),plan_id:body.plan_id||null};
@@ -542,7 +542,7 @@ export async function handle(req,env){
     }
     if(path==='/api/application-runner-status'){
       const allowed=['idle','running','paused','needs_input','blocked','submitted','error'];if(!allowed.includes(body.status))throw Error('Unknown runner status');
-      const row={status:body.status,last_seen:new Date().toISOString(),mode:'this_mac_while_awake',standing_authorization:body.standing_authorization===true,eligible_candidates:Math.max(0,Math.min(10000,Number(body.eligible_candidates)||0)),providers:Array.isArray(body.providers)?body.providers.filter(p=>['lever','breezy','html','email'].includes(p)):['lever'],selection:body.selection||'priority_only',message:String(body.message||'').slice(0,300)};await write(bucket,'hunt/runtime/desktop-runner.json',row);return reply({ok:true});
+      const row={status:body.status,last_seen:new Date().toISOString(),mode:'this_mac_while_awake',standing_authorization:body.standing_authorization===true,eligible_candidates:Math.max(0,Math.min(10000,Number(body.eligible_candidates)||0)),providers:Array.isArray(body.providers)?body.providers.filter(p=>['lever','breezy','html','email'].includes(p)):['lever'],selection:body.selection||'priority_only',sending_enabled:body.sending_enabled??null,daily_application_limit:Math.max(1,Math.min(5,Number(body.daily_application_limit)||5)),message:String(body.message||'').slice(0,300)};await write(bucket,'hunt/runtime/desktop-runner.json',row);return reply({ok:true});
     }
     if(path==='/api/applications/applied'){const [saved,cloud]=await Promise.all([read(bucket,SNAPSHOT),read(bucket,CLOUD_JOBS,{jobs:[]})]);const base=saved?.snapshot||{jobs:[],applications:[]};return reply(await recordApplied(bucket,body,{...base,jobs:[...(base.jobs||[]),...(cloud.jobs||[])]}));}
     if(path==='/api/tracker/connect')return reply(await connectTracker(bucket,body));

@@ -27,6 +27,12 @@ class PoolTests(unittest.TestCase):
     self.assertEqual([c.args[1]['job_id'] for c in worker.call_args_list],['j1','j2'])
     journal=json.loads((root/'data/pool-attempts.json').read_text());self.assertEqual({r['status'] for r in journal.values()},{'unreachable','missing_facts'})
     self.assertTrue(any('batch-report' in p for p,b in calls));self.assertTrue(any('all_routes=1' in p for p,b in calls))
+ def test_inspection_only_stops_before_cv_generation_or_upload(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   root=Path(tmp);policy=save_authorization(root/'data','owner',selection_mode='apply_available',providers=['lever','breezy','html','email'])
+   with patch('pool_worker.resolve_candidate',return_value={'status':'ready','provider':'html','url':'https://employer.example/apply'}),patch('pool_worker.prepare_source_native_package') as prepare,patch('pool_worker.form_adapter') as adapter:
+    result=pool_worker.process(None,{'job_id':'j','job_version':'v','application_url':'https://employer.example/apply'},None,policy,root)
+    self.assertEqual(result['status'],'awaiting_authorization');prepare.assert_not_called();adapter.assert_not_called()
  def test_saved_us_answers_are_country_scoped_and_unknown_numbers_are_not_invented(self):
   with tempfile.TemporaryDirectory() as tmp:
    root=Path(tmp);(root/'data').mkdir();(root/'data/master-cv.txt').write_text('PROFESSIONAL SUMMARY\nVerified HR experience.\nCORE COMPETENCIES\nRecruitment')

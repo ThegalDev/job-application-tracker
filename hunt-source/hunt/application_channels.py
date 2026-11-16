@@ -1,5 +1,5 @@
 """Channel routing, public-link binding and checksum-bound Gmail submission."""
-import copy,hashlib,json,os,re,shutil
+import copy,hashlib,json,os,re,shutil,sqlite3,datetime
 from pathlib import Path
 from urllib.parse import urlsplit,urlencode
 from urllib.request import Request,urlopen
@@ -9,6 +9,12 @@ from application_runner import HUNTConnection,ProductionLeverAdapter,validate_co
 from breezy_runner import ProductionBreezyAdapter
 
 ACCOUNT='majekadegbeaminat85@gmail.com'
+def daily_submission_count(root):
+    now=datetime.datetime.now(datetime.timezone.utc);wat=now+datetime.timedelta(hours=1);start=wat.replace(hour=0,minute=0,second=0,microsecond=0)-datetime.timedelta(hours=1)
+    file=Path(root)/'data/application-runner.sqlite3'
+    if not file.exists():return 0
+    with sqlite3.connect('file:'+str(file)+'?mode=ro',uri=True) as c:
+        return c.execute("SELECT COUNT(*) FROM application_execution_events WHERE kind='final_submission_started' AND at>=?",(start.isoformat(),)).fetchone()[0]
 def public_url(value):
     u=urlsplit(value)
     if u.scheme!='https' or u.username or u.password or u.port or not u.hostname or '.' not in u.hostname or re.match(r'^(?:localhost|0\.|127\.|10\.|192\.168\.|169\.254\.|172\.(?:1[6-9]|2\d|3[01])\.)',u.hostname) or u.hostname.endswith(('.local','.internal')):raise ValueError('Public HTTPS application URL required')
@@ -18,6 +24,10 @@ class RoutedConnection(HUNTConnection):
     def __init__(self,*args,**kwargs):super().__init__(*args,**kwargs);self.bindings={}
     def bind(self,job_id,url):self.bindings[job_id]=public_url(url)
     def checkpoint(self,payload):
+        from standing_authorization import read_authorization
+        policy=read_authorization(self.root/'data')
+        approved=policy.get('sending_enabled') is True and any(d.get('job_id')==payload['job_id'] and str(d.get('url','')).split('?')[0].rstrip('/').removesuffix('/apply')==payload['application_url'].split('?')[0].rstrip('/').removesuffix('/apply') for d in policy.get('approved_destinations',[]))
+        if not approved or daily_submission_count(self.root)>=policy.get('daily_application_limit',5):raise ValueError('Destination authorization or daily submission bound prevents sending')
         current=self.context(payload['job_id'],payload['package_id']);url=self.bindings.get(payload['job_id'])
         if not url or payload['application_url'].rstrip('/').removesuffix('/apply')!=url.rstrip('/').removesuffix('/apply'):raise ValueError('Application route is not bound to this live job')
         current=copy.deepcopy(current);current['job']['application_url']=url;validate_context(current,payload,url_validator=public_url)

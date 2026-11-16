@@ -9,7 +9,7 @@ from mac_application_worker import verified_contact_answers
 from standing_authorization import read_authorization,autonomous_engine,execute_under_standing_authorization
 from native_google_cv import private_json,prepare_source_native_package
 
-STATUSES={'submitted','email_sent','security_blocked','unreachable','closed','unsupported_form','missing_facts','unconfirmed','error'}
+STATUSES={'submitted','email_sent','security_blocked','unreachable','closed','unsupported_form','missing_facts','unconfirmed','error','awaiting_authorization'}
 def resolve_candidate(candidate,evidence):
     url=candidate.get('application_url')
     if not url:return {'status':'unreachable','message':'No application URL was saved'}
@@ -24,6 +24,10 @@ def process(client,candidate,engine,policy,root):
     if candidate.get('open') is False:return {'status':'closed','message':'Saved vacancy is closed; no application form is available'}
     route=resolve_candidate(candidate,evidence)
     if route['status']!='ready':return route
+    approved=policy.get('sending_enabled') is True and any(d.get('job_id')==ident and str(d.get('url','')).split('?')[0].rstrip('/').removesuffix('/apply')==route['url'].split('?')[0].rstrip('/').removesuffix('/apply') for d in policy.get('approved_destinations',[]))
+    if not approved:return {'status':'awaiting_authorization','message':'Application destination identified; no CV uploaded or email sent. Awaiting the bounded destination-batch approval.'}
+    from application_channels import daily_submission_count
+    if daily_submission_count(root)>=policy.get('daily_application_limit',5):return {'status':'daily_limit','message':'Daily submission limit reached; remaining applications resume tomorrow'}
     if route['provider'] not in policy['providers']:return {'status':'unsupported_form','message':'This channel is not enabled by the saved application policy'}
     adapter=None
     if route['provider']!='email':
@@ -78,11 +82,15 @@ def tick(root=ROOT):
             try:client.request('/api/application-attempt',body=json.loads(file.read_text()));file.unlink()
             except Exception:pass
         def report(status,message,pending=0):
-            row={'status':status,'message':message,'eligible_candidates':pending,'standing_authorization':True,'selection':'all_unhidden_unapplied','providers':policy['providers']};client.request('/api/application-runner-status',body=row);return row
+            row={'status':status,'message':message,'eligible_candidates':pending,'standing_authorization':True,'selection':'all_unhidden_unapplied','providers':policy['providers'],'sending_enabled':policy.get('sending_enabled') is True,'daily_application_limit':policy.get('daily_application_limit',5)};client.request('/api/application-runner-status',body=row);return row
         scan=client.request('/api/application-candidates?all_routes=1')
         if scan['paused']:return report('paused','HUNT is paused')
         journal_path=directory/'pool-attempts.json';journal=json.loads(journal_path.read_text()) if journal_path.exists() else {}
-        held=engine.held_job_ids();candidates=[c for c in scan['candidates'] if c['job_id'] not in held and execution.fingerprint([c['job_id'],c.get('job_version')]) not in journal]
+        held=engine.held_job_ids();approved_jobs={d['job_id'] for d in policy.get('approved_destinations',[])} if policy.get('sending_enabled') else set()
+        candidates=[]
+        for c in scan['candidates']:
+            prior=journal.get(execution.fingerprint([c['job_id'],c.get('job_version')]))
+            if c['job_id'] not in held and (not prior or prior.get('status')=='awaiting_authorization' and c['job_id'] in approved_jobs):candidates.append(c)
         if not candidates:
             if attempt_outbox.exists() and any(attempt_outbox.glob('*.json')):return report('running','Outcomes are saved locally and awaiting hosted synchronization')
             if journal:
@@ -94,6 +102,7 @@ def tick(root=ROOT):
         except Exception as error:
             text=str(error).lower();status='unconfirmed' if 'reconciliation' in text else 'unsupported_form' if 'unsupported_form' in text else 'unreachable' if isinstance(error,TimeoutError) or any(x in text for x in ('timeout','timed out','name_not_resolved','transport','connection','net::')) else 'error'
             result={'status':status,'message':'Application attempt did not complete ('+type(error).__name__+'). Continuing with the next pool record.'}
+        if result['status']=='daily_limit':return report('idle',result['message'],len(candidates))
         outcome={**result,'id':execution.fingerprint([c['job_id'],c.get('job_version')]),'job_id':c['job_id'],'job_version':c.get('job_version'),'company':c.get('company','Employer'),'role':c.get('title','Role'),'at':execution.stamp()}
         journal[outcome['id']]=outcome;private_json(journal_path,journal)
         pending_outcome=attempt_outbox/(outcome['id']+'.json');private_json(pending_outcome,outcome)
