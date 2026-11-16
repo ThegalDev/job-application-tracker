@@ -12,6 +12,7 @@ export function inspectHTML(){
  if(captcha)return {captcha:true,questions:[],url:location.href,action_url:location.href,provider:'html'};
  if(forms.length!==1)throw new Error('unsupported_form: No unique application form; account, custom controls or another adapter required');
  const form=forms[0],questions=[],seen=new Set();
+ if(form.method.toLowerCase()!=='post')throw new Error('unsupported_form: A custom submission handler requires a dedicated adapter');
  for(const e of form.querySelectorAll('input,textarea,select')){
   if(['hidden','submit','button','reset'].includes(e.type)||!visible(e)&&e.type!=='file')continue;
   if(e.getAttribute('role')==='combobox')throw new Error('unsupported_form: Custom autocomplete requires a dedicated adapter');
