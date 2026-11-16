@@ -13,6 +13,8 @@ class StandingTests(unittest.TestCase):
  def test_submits_without_per_application_owner_approval_and_records_policy(self):
   p=self.plan({'name':{'value':'Fixture Candidate','source':'verified_profile','verified':True}});adapter=FixtureAdapter();r=standing.execute_under_standing_authorization(self.engine,p['id'],adapter,self.policy,self.root);self.assertEqual(r['status'],'submitted');self.assertTrue(r['approved_by'].startswith('standing-owner-authorization:'));self.assertEqual(adapter.submissions,1)
   standing.execute_under_standing_authorization(self.engine,p['id'],adapter,self.policy,self.root);self.assertEqual(adapter.submissions,1)
+ def test_available_mode_is_an_explicit_persisted_owner_choice(self):
+  policy=standing.save_authorization(self.root,'owner requested available-role applications',True,selection_mode='apply_available');self.assertTrue(policy['fit_preferences_only']);self.assertEqual(standing.read_authorization(self.root)['selection_mode'],'apply_available')
  def test_missing_facts_pause_instead_of_requesting_approval_or_guessing(self):
   p=self.plan({});adapter=FixtureAdapter();r=standing.execute_under_standing_authorization(self.engine,p['id'],adapter,self.policy,self.root);self.assertEqual(r['status'],'needs_input');self.assertEqual(adapter.submissions,0)
  def test_revocation_stops_execution(self):

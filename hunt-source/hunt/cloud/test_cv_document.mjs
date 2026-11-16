@@ -41,3 +41,9 @@ test('autonomous candidates respect priority, provider, original date, hidden em
  await b.put('hunt/preferences/job-visibility.json',JSON.stringify({hidden_jobs:[],hidden_employers:[{key:'fixture'}]}));assert.equal((await(await request()).json()).candidates.length,0);
  await b.put('hunt/preferences/job-visibility.json',JSON.stringify({hidden_jobs:[],hidden_employers:[]}));await b.put('hunt/control.json','{"paused":true}');assert.equal((await(await request()).json()).candidates.length,0);
 });
+test('explicit available-role policy relaxes fit filters while keeping hidden jobs blocked',async()=>{
+ const b=new Bucket(),job={id:'available-role',company:'Fixture',title:'People Operations Specialist',raw_hash:'v1',open:true,location:'United States',description:'HR operations and recruiting.',url:'https://jobs.lever.co/fixture/11111111-1111-1111-1111-111111111111'};
+ await b.put('hunt/owner.json','{"id":"owner"}');await b.put('hunt/snapshot.json',JSON.stringify({snapshot:{paused:false,jobs:[job],packages:[],applications:[],facts:[],sources:[],events:[]}}));const env={BUCKET:b},request=()=>handle(new Request('https://hunt.example/api/application-candidates',{headers:{'oai-authenticated-user-id':'owner'}}),env);
+ assert.equal((await(await request()).json()).candidates.length,0);await b.put('hunt/private/application-policy.json','{"version":2,"mode":"apply_available"}');assert.equal((await(await request()).json()).candidates.length,1);
+ await b.put('hunt/preferences/job-visibility.json',JSON.stringify({hidden_jobs:[{id:job.id}],hidden_employers:[{key:'fixture'}]}));assert.equal((await(await request()).json()).candidates.length,0);
+});

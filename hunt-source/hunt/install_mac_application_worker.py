@@ -14,7 +14,9 @@ if __name__=='__main__':
     for name in ['mac_application_worker.py','application_runner.py','application_execution.py','standing_authorization.py','employer_browser.mjs','native_google_cv.py']:
         shutil.copy2(ROOT/name,target/name)
     private=target/'data';private.mkdir(exist_ok=True,mode=0o700);private.chmod(0o700)
-    save_authorization(private,'owner authorized in HUNT workspace conversation',True)
+    existing=private/'standing-application-authorization.json'
+    selection_mode=json.loads(existing.read_text()).get('selection_mode','priority_only') if existing.exists() else 'priority_only'
+    save_authorization(private,'owner authorized in HUNT workspace conversation',True,selection_mode=selection_mode)
     shutil.copy2(ROOT/'data/master-cv.txt',private/'master-cv.txt');(private/'master-cv.txt').chmod(0o600)
     fd=os.open(private/'owner-connection.json',os.O_CREAT|os.O_TRUNC|os.O_WRONLY,0o600)
     with os.fdopen(fd,'w') as file:json.dump({'owner_key':load_owner_key(ROOT)},file)

@@ -16,10 +16,12 @@ export function employerURL(value){
   return u;
 }
 const ASSET_HOSTS=new Set([...LEVER_HOSTS,'hire.lever.co','cdn.lever.co','uploads.lever.co','api.lever.co','api.eu.lever.co','cdnjs.cloudflare.com','cdn.jsdelivr.net','fonts.googleapis.com','fonts.gstatic.com','www.google.com','www.gstatic.com','challenges.cloudflare.com']);
-export function requestAllowed(target,method,stage,origin,resourceType){
+export function requestAllowed(target,method,stage,origin,resourceType,isMainFrame=true){
   let u;try{u=new URL(target)}catch{return false}
-  if(u.protocol!=='https:'||u.username||u.password||u.port||!ASSET_HOSTS.has(u.hostname))return false;
-  if(['GET','HEAD'].includes(method))return u.origin===origin||resourceType!=='document';
+  const captchaHost=u.hostname==='hcaptcha.com'||u.hostname.endsWith('.hcaptcha.com');
+  if(u.protocol!=='https:'||u.username||u.password||u.port||!ASSET_HOSTS.has(u.hostname)&&!captchaHost)return false;
+  if(['GET','HEAD'].includes(method))return u.origin===origin||resourceType!=='document'||!isMainFrame&&(captchaHost||['www.google.com','challenges.cloudflare.com'].includes(u.hostname));
+  if(captchaHost&&method==='POST')return true;
   // Inspection never discloses application answers. File parsing/uploads can
   // happen during an already approved fill, but only to the ATS itself.
   if(!['POST','PUT'].includes(method))return false;
@@ -42,24 +44,28 @@ export function inspectLeverDocument(){
    const seen=new Set(),questions=[];
    for(const e of controls){
     if(!e.name&&!e.id)throw new Error('An employer control has no stable identity');
-    const group=e.closest('.application-question,.application-additional,.application-field,fieldset')||e.parentElement;
+    const group=e.closest('.application-question,fieldset')||e.closest('.application-additional')||e.closest('.application-field')||e.parentElement;
     const explicit=e.id?[...document.querySelectorAll('label')].find(l=>l.htmlFor===e.id):null;
     const title=group?.querySelector('.application-label,.application-question-label,legend,label');
-    const label=(e.getAttribute('aria-label')||title?.innerText||explicit?.innerText||e.getAttribute('placeholder')||'').trim().replace(/\s+/g,' ');
-    if(!label)throw new Error('An employer question has no readable label');
-    if(e.type==='checkbox'&&counts.get(e.name)>1)throw new Error('Multiple-choice checkbox groups need an explicitly supported adapter');
+    const label=(e.getAttribute('aria-label')||title?.innerText||explicit?.innerText||e.getAttribute('placeholder')||(e.type==='file'&&e.name==='resume'?'Resume/CV':'')).trim().replace(/\s+/g,' ');
+    const optionalGroup=e.type==='checkbox'&&counts.get(e.name)>1&&!controls.some(x=>x.name===e.name&&(x.required||x.getAttribute('aria-required')==='true'));
+    if(optionalGroup)continue;
+    if(!label&&!e.required&&e.getAttribute('aria-required')!=='true'&&e.type!=='file')continue;
+    if(!label&&e.type!=='file')throw new Error('An employer question has no readable label');
+    if(e.type==='checkbox'&&counts.get(e.name)>1)throw new Error('Required multiple-choice checkbox groups need an explicitly supported adapter');
     const key=e.type==='radio'?'name:'+e.name:e.id?'id:'+e.id:'name:'+e.name;
     if(seen.has(key))continue;seen.add(key);
     const type=e.tagName==='TEXTAREA'?'textarea':e.tagName==='SELECT'?'select':e.type;
     if(!['text','email','tel','url','textarea','select','radio','checkbox','file','date','number'].includes(type))throw new Error('Unsupported employer field type: '+type);
-    const item={id:key,label,type:['date','number'].includes(type)?'text':type,input_type:type,required:e.required||e.getAttribute('aria-required')==='true'||/\*\s*$/.test(title?.innerText||'')};
+    const item={id:key,label,type:['date','number'].includes(type)?'text':type,input_type:type,required:e.required||e.getAttribute('aria-required')==='true'||/[*✱]/.test(title?.innerText||'')};
     if(type==='select')item.options=[...e.options].filter(x=>!x.disabled&&x.value!=='').map(x=>x.value);
     if(type==='radio')item.options=controls.filter(x=>x.type==='radio'&&x.name===e.name).map(x=>x.value);
     questions.push(item);
    }
    const submit=[...form.querySelectorAll('button,input[type="submit"]')].filter(e=>e.type==='submit');
    if(submit.length!==1)throw new Error('A unique final submit control could not be inspected');
-   const challenge=[...document.querySelectorAll('iframe[src*="recaptcha"],iframe[src*="hcaptcha"],iframe[src*="challenges.cloudflare.com"],.g-recaptcha,.h-captcha')].some(visible);
+   const captchaSolved=[...document.querySelectorAll('textarea[name="h-captcha-response"],textarea[name="g-recaptcha-response"]')].some(e=>e.value?.trim());
+   const challenge=!captchaSolved&&[...document.querySelectorAll('iframe[src*="recaptcha"],iframe[src*="hcaptcha"],iframe[src*="challenges.cloudflare.com"],.g-recaptcha,.h-captcha')].some(visible);
    const securityFailure=/(?:security check (?:did not|failed to) load|verify you are human|complete the captcha|access denied)/i.test(form.innerText);
    return {url:location.href,action_url:form.action||location.href,questions,captcha:challenge||securityFailure,platform_restriction:false,provider:'lever',submit_label:(submit[0].innerText||submit[0].value||'Submit').trim()};
 }
@@ -71,22 +77,23 @@ async function main(){
  let pw;
  if(process.env.HUNT_PLAYWRIGHT_MODULE)pw=await import(pathToFileURL(path.resolve(process.env.HUNT_PLAYWRIGHT_MODULE)).href);
  else try{pw=await import('playwright')}catch{throw new Error('Install Playwright and its Chromium browser, or set HUNT_PLAYWRIGHT_MODULE to the installed Playwright index.mjs')}
- const browser=await pw.chromium.launch({headless:true,...(process.env.HUNT_CHROME_EXECUTABLE?{executablePath:process.env.HUNT_CHROME_EXECUTABLE}:{}),args:['--disable-background-networking','--disable-component-update']});
+ const browser=await pw.chromium.launch({headless:process.env.HUNT_BROWSER_VISIBLE!=='1',...(process.env.HUNT_CHROME_EXECUTABLE?{executablePath:process.env.HUNT_CHROME_EXECUTABLE}:{}),args:['--disable-background-networking','--disable-component-update']});
  const context=await browser.newContext({serviceWorkers:'block',acceptDownloads:false});
  let stage='inspect',loaded=false,observedForm=null;
- await context.route('**/*',route=>requestAllowed(route.request().url(),route.request().method(),stage,initial.origin,route.request().resourceType())?route.continue():route.abort('blockedbyclient'));
+ await context.route('**/*',route=>requestAllowed(route.request().url(),route.request().method(),stage,initial.origin,route.request().resourceType(),route.request().frame()===page.mainFrame())?route.continue():route.abort('blockedbyclient'));
  const page=await context.newPage();page.setDefaultTimeout(12000);
- async function saveEvidence(prefix,ident){const safe=String(ident||'inspection').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,80)||'inspection';const file=path.join(evidenceDir,prefix+'-'+safe+'.png');await page.screenshot({path:file,fullPage:true,timeout:3000});await chmod(file,0o600);return file}
+ async function saveEvidence(prefix,ident){const safe=String(ident||'inspection').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,80)||'inspection';const file=path.join(evidenceDir,prefix+'-'+safe+'.png');try{await page.screenshot({path:file,fullPage:true,animations:'disabled',timeout:10000});await chmod(file,0o600);return file}catch{return null}}
  async function inspect(){
   stage='inspect';
   if(!loaded){await page.goto(initial.href,{waitUntil:'commit',timeout:30000});await page.locator('input[name="email"],a[href$="/apply"]').first().waitFor({state:'attached',timeout:15000});loaded=true}
   const current=employerURL(page.url());if(current.origin!==initial.origin||current.pathname.replace(/\/apply\/?$/,'')!==initial.pathname.replace(/\/apply\/?$/,''))throw new Error('Employer navigation changed the selected job');
   if(!/\/apply\/?$/.test(current.pathname)){
    const apply=page.locator('a[href]').filter({hasText:/^Apply for this job$/i});
-   if(await apply.count()!==1)throw new Error('A unique employer application link is not available');
-   const href=new URL(await apply.getAttribute('href'),page.url());employerURL(href.href);
+   const count=await apply.count();if(!count)throw new Error('An employer application link is not available');
+   const href=new URL(await apply.first().getAttribute('href'),page.url());employerURL(href.href);
+   for(let i=1;i<count;i++)if(new URL(await apply.nth(i).getAttribute('href'),page.url()).href!==href.href)throw new Error('Employer application links disagree');
    if(href.origin!==initial.origin||href.pathname.replace(/\/apply\/?$/,'')!==initial.pathname.replace(/\/apply\/?$/,''))throw new Error('Application link points to a different job');
-   await apply.click();await page.waitForLoadState('domcontentloaded');
+   await apply.first().click();await page.waitForLoadState('domcontentloaded');
   }
   observedForm=await page.evaluate(inspectLeverDocument);
   const action=new URL(observedForm.action_url);if(action.protocol!=='https:'||action.origin!==initial.origin)throw new Error('Form action is outside the selected ATS');
@@ -111,7 +118,7 @@ async function main(){
   const form=page.locator('form').filter({has:page.locator('input[name="email"]')});
   const button=form.locator('button[type="submit"],input[type="submit"]');
   if(await button.count()!==1||!await button.isEnabled())throw new Error('Employer submit control is unavailable or security-blocked');
-  if(await page.locator('iframe[src*="recaptcha"],iframe[src*="hcaptcha"],iframe[src*="challenges.cloudflare.com"]').filter({visible:true}).count())throw new Error('Employer security challenge requires owner interaction');
+  if((await page.evaluate(inspectLeverDocument)).captcha)throw new Error('Employer security challenge requires owner interaction');
   const expected={answers:Object.fromEntries(Object.entries(payload.answers).map(([id,a])=>[id,a.value])),uploads:Object.fromEntries(Object.entries(payload.uploads).map(([id,u])=>[id,u.sha256]))};
   if(JSON.stringify(await readPreview(payload))!==JSON.stringify(expected))throw new Error('Filled form changed after review; submission blocked');
   const beforeURL=page.url();

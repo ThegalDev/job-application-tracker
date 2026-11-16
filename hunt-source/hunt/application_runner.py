@@ -51,7 +51,7 @@ class HUNTConnection:
         self.root=Path(root)
 
     def request(self,path,binary=False,body=None):
-        if not path.startswith(('/api/application-context?','/api/cv-artifact?','/api/application-candidates','/api/application-runner-status','/api/package','/api/application-receipt','/api/native-cv-draft','/api/native-cv-attach')):raise ValueError('Runner read path denied')
+        if not path.startswith(('/api/application-context?','/api/cv-artifact?','/api/application-candidates','/api/application-runner-status','/api/package','/api/application-receipt','/api/native-cv-draft','/api/native-cv-attach','/api/application-policy')):raise ValueError('Runner read path denied')
         headers={'X-HUNT-Owner-Key':self.owner_key,'Cache-Control':'no-cache'}
         if body is not None:
             token=secrets.token_hex(32);headers.update({'Origin':BASE,'Cookie':'__Host-hunt_csrf='+token,'X-CSRF-Token':token,'Content-Type':'application/json'})
@@ -90,11 +90,14 @@ def validate_context(context,payload):
     if not j.get('open') or j.get('hidden'):raise ValueError('Role is closed or hidden')
     if j['id']!=payload['job_id'] or j['raw_hash']!=payload['job_version'] or p['id']!=payload['package_id'] or p['payload_hash']!=payload['package_hash'] or p['job_version']!=j['raw_hash']:raise ValueError('Job or reviewed package version changed')
     if p.get('status') in ('superseded','rejected','requires_revision') or not p.get('writing_profile_current') or not p.get('master_cv_current'):raise ValueError('Current reviewed CV wording and source are required')
-    if a.get('score',0)<85:raise ValueError('Role has not reached the priority fit threshold')
-    if not j.get('publication_verified_original'):raise ValueError('Verify the employer-original posting date before automatic application')
-    if not j.get('within_discovery_window') or not j.get('global_remote') or a.get('tier') not in ('A','B') or a.get('role_relevant') is False:raise ValueError('Resolve current 48-hour freshness and Nigeria remote eligibility first')
-    pay=a.get('compensation',{})
-    if pay.get('status')!='meets_floor' or not isinstance(pay.get('monthly_min'),(int,float)) or pay['monthly_min']<2500:raise ValueError('Resolve the verified USD 2500 monthly salary gate first')
+    available=context.get('application_policy',{}).get('mode')=='apply_available'
+    if a.get('role_relevant') is False:raise ValueError('Role is outside the owner search')
+    if not available:
+        if a.get('score',0)<85:raise ValueError('Role has not reached the priority fit threshold')
+        if not j.get('publication_verified_original'):raise ValueError('Verify the employer-original posting date before automatic application')
+        if not j.get('within_discovery_window') or not j.get('global_remote') or a.get('tier') not in ('A','B') or a.get('role_relevant') is False:raise ValueError('Resolve current 48-hour freshness and Nigeria remote eligibility first')
+        pay=a.get('compensation',{})
+        if pay.get('status')!='meets_floor' or not isinstance(pay.get('monthly_min'),(int,float)) or pay['monthly_min']<2500:raise ValueError('Resolve the verified USD 2500 monthly salary gate first')
     if a.get('duplicate_applications') or a.get('duplicate_listing_of'):raise ValueError('An application or duplicate listing already exists')
     reviewed=payload.get('cv_artifact')
     if not reviewed or reviewed['sha256']!=cv['sha256'] or reviewed['package_hash']!=p['payload_hash']:raise ValueError('Reviewed CV file version changed')
@@ -125,7 +128,7 @@ class ProductionLeverAdapter:
         line=self.process.stdout.readline()
         if not line:raise RuntimeError('Employer browser exited without a verified result')
         result=json.loads(line)
-        if result.get('ok') is not True:raise RuntimeError('Employer browser step could not be verified: '+result.get('error_type','Error'))
+        if result.get('ok') is not True:raise RuntimeError('Employer browser step could not be verified: '+result.get('error_type','Error')+': '+result.get('error','No detail'))
         return result['result']
 
     def inspect(self,payload=None):return self._call('inspect')

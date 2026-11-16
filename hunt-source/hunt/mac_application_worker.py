@@ -20,13 +20,16 @@ def verified_contact_answers(form,context,root=ROOT):
     lines=[line.strip().lstrip('\ufeff') for line in source.splitlines() if line.strip()]
     email=re.search(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}',source)
     phone=re.search(r'\+\(?234\)?[\d\s-]{9,18}',source)
-    known={'name':lines[0] if lines else None,'email':email.group(0) if email else None,'phone':re.sub(r'[^+\d]','',phone.group(0)) if phone else None}
+    experience=source.partition('PROFESSIONAL EXPERIENCE')[2].partition('EDUCATION')[0]
+    experience_lines=[line.strip() for line in experience.splitlines() if line.strip()]
+    current_company=experience_lines[0].split('\t')[0].strip() if experience_lines and re.search(r'\bpresent\b',' '.join(experience_lines[:4]),re.I) else None
+    known={'company':current_company,'name':lines[0] if lines else None,'email':email.group(0) if email else None,'phone':re.sub(r'[^+\d]','',phone.group(0)) if phone else None}
     answers={}
     for question in form['questions']:
-        label=question['label'].lower().strip().rstrip('*').strip()
+        label=question['label'].lower().strip().rstrip('*✱').strip()
         # Only direct contact questions; never infer authorization, consent,
         # demographics, salary, availability, years, or role-specific claims.
-        field='name' if label in ('full name','name','your full name') else 'email' if label in ('email','email address','your email') else 'phone' if label in ('phone','phone number','mobile phone','mobile number') else None
+        field='name' if label in ('full name','name','your full name') else 'email' if label in ('email','email address','your email') else 'company' if label in ('current company','current employer') else 'phone' if label in ('phone','phone number','mobile phone','mobile number') else None
         if field and known[field] and question['type'] in ('text','email','tel'):answers[question['id']]={'value':known[field],'source':'verified_profile','verified':True}
     return answers
 
@@ -34,7 +37,7 @@ def verified_contact_answers(form,context,root=ROOT):
 def process_candidate(client,candidate,engine,policy,root=ROOT,adapter_factory=ProductionLeverAdapter):
     job_id=candidate['job_id'];package_id=candidate.get('package_id')
     if not package_id:
-        package=client.request('/api/package',body={'job_id':job_id,'use_ai':True});package_id=package.get('id')
+        package=client.request('/api/package',body={'job_id':job_id,'use_ai':False});package_id=package.get('id')
         if not package_id:raise ValueError('Tailored CV generation did not return a saved package')
     from native_google_cv import prepare_native_package
     package_id=prepare_native_package(client,package_id,root)['id']
@@ -84,8 +87,8 @@ def tick(root=ROOT):
         candidates=[c for c in scan['candidates'] if execution.fingerprint([c['job_id'],c.get('job_version')]) not in journal]
         if not candidates:
             if scan['candidates']:return report('needs_input','The saved candidate versions are paused or already attempted. No repeat application was attempted.')
-            return report('idle','No qualifying priority Lever roles within your saved gates. No application was attempted.')
-        report('running','Checking one qualifying role.',len(candidates))
+            return report('idle','No unhidden, unapplied roles with a supported Lever form are available. No application was attempted.')
+        report('running','Preparing one available role under your application policy.',len(candidates))
         try:
             result=process_candidate(client,candidates[0],engine,policy,root)
             status=result['status'] if result['status'] in ('submitted','needs_input','blocked') else 'blocked'
