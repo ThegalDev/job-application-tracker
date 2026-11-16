@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import {readFileSync} from 'node:fs';
+const source=readFileSync(new URL('../web/app.js',import.meta.url),'utf8');
+const buttons=[{disabled:false,dataset:{}},{disabled:true,dataset:{}}];
+const context=vm.createContext({document:{querySelectorAll:()=>buttons}});
+vm.runInContext(source.slice(source.indexOf('function setActionControls('),source.indexOf('async function action(')),context);
+context.setActionControls(true);context.setActionControls(true);context.setActionControls(false);
+assert.equal(buttons[0].disabled,false,'Repeated render while action runs must not permanently disable controls');
+assert.equal(buttons[1].disabled,true,'Existing approval restriction must remain disabled');
+assert.deepEqual(buttons.map(b=>Object.keys(b.dataset).length),[0,0]);
+console.log('3 repeated-render action control checks passed');

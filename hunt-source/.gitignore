@@ -1,0 +1,11 @@
+.env*
+**/data/
+**/work/
+**/__pycache__/
+**/node_modules/
+**/dist/
+**/.openai/
+*.sqlite3*
+*oauth*.json
+*client-secret*.json
+.DS_Store

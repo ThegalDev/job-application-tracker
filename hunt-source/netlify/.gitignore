@@ -1,0 +1,7 @@
+node_modules/
+.netlify/
+.env*
+private-seed/
+runtime/worker.mjs
+public/
+
