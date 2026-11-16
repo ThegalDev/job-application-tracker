@@ -25,8 +25,9 @@ server_source=server_source.replace("import {createNativeCVTask,nativeCVTask,exe
 source=native_prelude+'const CV_TAILORING_INSTRUCTIONS='+json.dumps((ROOT.parent/'cv-tailoring-instructions.md').read_text())+';\n'+cv_prelude+application_prelude+visibility_prelude+notification_prelude+'const DRAFTING_INSTRUCTIONS='+json.dumps(instructions,ensure_ascii=False)+';\n'+'const WRITING_PROFILE='+json.dumps(profile,ensure_ascii=False)+';\n'+'const ASSETS='+json.dumps(assets,ensure_ascii=False)+';\n'+server_source
 out=ROOT/'dist/server/index.js';out.parent.mkdir(parents=True,exist_ok=True);out.write_text(source)
 manifest=ROOT/'.openai/hosting.json'
-config=json.loads(manifest.read_text());config['r2']='BUCKET';config['d1']=None;config.pop('static',None)
-manifest.write_text(json.dumps(config,indent=2)+'\n')
+if manifest.exists():
+    config=json.loads(manifest.read_text());config['r2']='BUCKET';config['d1']=None;config.pop('static',None)
+    manifest.write_text(json.dumps(config,indent=2)+'\n')
 runtime=ROOT/'agent-runtime';runtime.mkdir(exist_ok=True)
 for path in ROOT.parent.glob('*.py'):
     if not path.name.startswith('test_'):shutil.copy2(path,runtime/path.name)

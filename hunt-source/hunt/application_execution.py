@@ -163,6 +163,11 @@ class ApplicationExecution:
             result['receipt'] = json.loads(result['receipt']) if result['receipt'] else None
             return result
 
+    def held_job_ids(self):
+        """Keep unresolved employer attempts held across package/version changes."""
+        with self.db() as c:
+            return {row['job_id'] for row in c.execute("SELECT DISTINCT job_id FROM application_execution_plans WHERE status IN ('preparing','submitting','uncertain','submitted','not_submitted')")}
+
     def plan(self, *, job_id, job_version, package_id, package_hash, form, answers, uploads=None, cv_artifact=None):
         if not all(isinstance(v, str) and v for v in (job_id, job_version, package_id, package_hash)):
             raise ValueError('Exact job and package identities and versions are required')
@@ -235,7 +240,7 @@ class ApplicationExecution:
         # preparing/submitting state requiring human reconciliation.
         with self.db() as c:
             c.execute('BEGIN IMMEDIATE')
-            prior = c.execute("SELECT id FROM application_execution_plans WHERE job_id=? AND id<>? AND status IN ('preparing','submitting','uncertain','submitted')", (payload['job_id'], ident)).fetchone()
+            prior = c.execute("SELECT id FROM application_execution_plans WHERE job_id=? AND id<>? AND status IN ('preparing','submitting','uncertain','submitted','not_submitted')", (payload['job_id'], ident)).fetchone()
             if prior:
                 raise ValueError('This role already has an application attempt requiring reconciliation')
             changed = c.execute("UPDATE application_execution_plans SET status='preparing',updated=? WHERE id=? AND status='approved'", (stamp(), ident)).rowcount
@@ -254,6 +259,12 @@ class ApplicationExecution:
                         'uploads': {k: v['sha256'] for k, v in payload['uploads'].items()}}
             if preview != expected:
                 return self._transition(ident, 'needs_review', 'filled_preview_does_not_match_approval')
+            if callable(getattr(adapter,'readiness',None)):
+                readiness=adapter.readiness()
+                if not readiness.get('valid') or not readiness.get('resume_files') or readiness.get('upload_success') is not True:
+                    return self._transition(ident,'needs_input','employer_form_validation_failed')
+            if form_version(adapter.inspect(payload))!=payload['form_version']:
+                return self._transition(ident,'needs_review','employer_questions_changed_after_upload')
             self.checkpoint(payload)
             # Re-read the persisted approval and every attachment after filling,
             # immediately before the irreversible final click.
@@ -267,6 +278,8 @@ class ApplicationExecution:
                 return self._transition(ident, 'needs_review', 'approval_expired_before_submit')
             self._transition(ident, 'submitting', 'final_submission_started')
             receipt = adapter.submit(payload, ident)
+            if isinstance(receipt,dict) and receipt.get('submitted') is False and receipt.get('rejected') is True:
+                return self._transition(ident,'not_submitted','employer_rejected_application',error=str(receipt.get('server_message','Employer rejected the form'))[:300])
             if not isinstance(receipt, dict) or receipt.get('submitted') is not True or not receipt.get('confirmation_id') or receipt.get('evidence_kind') not in ('confirmation_page', 'provider_receipt', 'confirmation_email') or not permitted_url(receipt.get('evidence_url'), payload['form'].get('fixture_only')) or not receipt.get('confirmation_text'):
                 raise RuntimeError('Submission has no positive confirmation evidence')
         except Exception as exc:

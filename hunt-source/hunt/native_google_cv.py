@@ -117,7 +117,8 @@ class NativeGoogleCV:
         if len(raw)>10*1024*1024:raise ValueError('Native document exceeds bounded export')
         return raw if binary else json.loads(raw)
     def get(self,id):return self.call('https://docs.googleapis.com/v1/documents/'+id+'?includeTabsContent=true')
-    def master(self):return self.get(MASTER)
+    def master(self):
+        doc=self.get(MASTER);private_json(self.root/'data/master-cv-structure.json',doc);return doc
     def tailor(self,source,replacements,title):
         plan=mapping(source);expected={p['id']:p for p in plan if p['editable']}
         edits={p['id']:p['text'] for p in replacements}
@@ -132,6 +133,7 @@ class NativeGoogleCV:
         versions=project_tool_versions(plan)
         for i,new in edits.items():
             old=expected[i]['text']
+            if any(name.lower() not in source_text.lower() for name in re.findall(r'\b[A-Z][a-z]+(?:[A-Z][a-z]+)+\b',new)):raise ValueError('Unsourced company or platform name in native CV')
             if any(re.search(r'\b'+re.escape(term)+r'\b',new,re.I) for term in unsupported_scopes):raise ValueError('Unsourced hiring department in native CV')
             if not isinstance(new,str) or not new.strip() or re.search(r'[\n\r\v]',new):raise ValueError('Paragraph boundaries may not change')
             nums=lambda s:{n.replace(',','') for n in re.findall(r'\b\d+(?:[,.]\d+)*\b',s)}
@@ -153,7 +155,7 @@ class NativeGoogleCV:
             if full!=p['prefix']+old:raise ValueError('Native copied paragraph changed')
             # Indexed replacement is scoped to this exact paragraph, including duplicate wording.
             requests.extend([{'deleteContentRange':{'range':{'tabId':tab,'startIndex':start,'endIndex':end}}},{'insertText':{'location':{'tabId':tab,'index':start},'text':new}}])
-        self.call('https://docs.googleapis.com/v1/documents/'+id+':batchUpdate',{'requests':requests,'writeControl':{'requiredRevisionId':doc['revisionId']}})
+        if requests:self.call('https://docs.googleapis.com/v1/documents/'+id+':batchUpdate',{'requests':requests,'writeControl':{'requiredRevisionId':doc['revisionId']}})
         doc=self.get(id);tab,_,rows=paragraphs(doc);_,_,original=paragraphs(source);styles=[]
         for i,p in expected.items():
             if text(rows[i])!=p['prefix']+edits[i]:raise ValueError('Native content readback mismatch')
@@ -213,3 +215,24 @@ def prepare_native_package(client,package_id,root):
     target=Path(root)/'data/master-cv.txt';fd=os.open(target,os.O_CREAT|os.O_TRUNC|os.O_WRONLY,0o600)
     with os.fdopen(fd,'w') as out:out.write(master_text)
     return result
+
+def prepare_source_native_package(client,package_id,root):
+    """Autonomous full-CV copy with verbatim evidence emphasis; no model allowance."""
+    google=NativeGoogleCV(root);source=google.master();plan=mapping(source)
+    package=client.request('/api/package?'+urlencode({'id':package_id}))
+    _,_,rows=paragraphs(source);master_text='\n'.join(text(row) for row in rows)+'\n'
+    private_json(Path(root)/'data/master-cv-structure.json',source)
+    target=Path(root)/'data/master-cv.txt';fd=os.open(target,os.O_CREAT|os.O_TRUNC|os.O_WRONLY,0o600)
+    with os.fdopen(fd,'w') as out:out.write(master_text)
+    native=package.get('native_cv') or {}
+    if native.get('preparation')=='source_grounded_autonomous' and native.get('source_revision')==source['revisionId']:return package
+    replacements=[{'id':p['id'],'text':p['text']} for p in plan if p['editable']]
+    recruitment=next((p['text'] for p in plan if p['text'].startswith('Own full-cycle recruitment for technical,')),None)
+    for item in replacements:
+        original=next(p for p in plan if p['id']==item['id'])
+        if original['kind']=='headline':item['text']='HR Professional | Recruitment & People Operations'
+        if original['kind']=='summary' and recruitment and re.search(r'recruit|talent',package.get('role',''),re.I):
+            item['text']=item['text'].split('. ',1)[0]+'. '+recruitment
+    path,report=google.tailor(source,replacements,'Majekadegbe Aminat Bamitale — '+str(package.get('company','Employer'))+' — '+str(package.get('role','Role'))+' — Source-verified CV')
+    report['preparation']='source_grounded_autonomous'
+    return client.request('/api/native-cv-attach',body={'package_id':package['id'],'expected_payload_hash':package['payload_hash'],'tailored_text':report.pop('tailored_text'),'native_cv':report,'pdf_base64':base64.b64encode(path.read_bytes()).decode(),'master_text':master_text})

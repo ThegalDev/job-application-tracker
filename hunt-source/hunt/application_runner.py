@@ -5,6 +5,8 @@ submission is permitted only by ApplicationExecution's exact approval ledger.
 This is a desktop runner, not an always-on cloud browser service.
 """
 import argparse
+import io
+import socket
 import contextlib
 import hashlib
 import json
@@ -19,6 +21,7 @@ import sys
 from pathlib import Path
 from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, build_opener, HTTPRedirectHandler
+from urllib.error import URLError,HTTPError
 import application_execution as execution
 
 ROOT=Path(__file__).resolve().parent
@@ -44,6 +47,18 @@ class NoRedirect(HTTPRedirectHandler):
         raise ValueError('Unexpected credential-bearing redirect')
 
 
+def curl_private_request(url,headers,body=None):
+    quote=lambda value:'"'+str(value).replace('\\','\\\\').replace('"','\\"').replace('\n','\\n').replace('\r','\\r')+'"'
+    config='url = '+quote(url)+'\n'+''.join('header = '+quote(k+': '+v)+'\n' for k,v in headers.items())
+    if body is not None:config+='request = "POST"\ndata-binary = '+quote(json.dumps(body))+'\n'
+    result=subprocess.run(['/usr/bin/curl','--config','-','--compressed','--silent','--max-time','30','--max-filesize','10485760','--proto','=https','--write-out','\n%{http_code}'],input=config.encode(),capture_output=True,timeout=35)
+    if result.returncode:raise ValueError('HUNT transport could not be verified')
+    data,separator,status=result.stdout.rpartition(b'\n')
+    if not separator or not status.isdigit():raise ValueError('HUNT response status is missing')
+    if not 200<=int(status)<300:raise HTTPError(url,int(status),'HUNT request was not accepted',{},io.BytesIO(data))
+    return data
+
+
 class HUNTConnection:
     def __init__(self,owner_key,root=ROOT):
         if not owner_key:raise ValueError('Existing HUNT owner connection required')
@@ -51,13 +66,18 @@ class HUNTConnection:
         self.root=Path(root)
 
     def request(self,path,binary=False,body=None):
-        if not path.startswith(('/api/application-context?','/api/cv-artifact?','/api/application-candidates','/api/application-runner-status','/api/package','/api/application-receipt','/api/native-cv-draft','/api/native-cv-attach','/api/application-policy')):raise ValueError('Runner read path denied')
+        if not path.startswith(('/api/application-context?','/api/cv-artifact?','/api/application-candidates','/api/application-runner-status','/api/application-attempt','/api/application-batch-report','/api/package','/api/application-receipt','/api/native-cv-draft','/api/native-cv-attach','/api/application-policy')):raise ValueError('Runner read path denied')
         headers={'X-HUNT-Owner-Key':self.owner_key,'Cache-Control':'no-cache'}
         if body is not None:
             token=secrets.token_hex(32);headers.update({'Origin':BASE,'Cookie':'__Host-hunt_csrf='+token,'X-CSRF-Token':token,'Content-Type':'application/json'})
         req=Request(BASE+path,headers=headers,data=json.dumps(body).encode() if body is not None else None)
-        with build_opener(NoRedirect).open(req,timeout=25) as response:
-            data=response.read(10*1024*1024+1)
+        try:
+            with build_opener(NoRedirect).open(req,timeout=25) as response:data=response.read(10*1024*1024+1)
+        except URLError as error:
+            # A DNS failure occurs before any request is sent. Mutating calls
+            # are never retried after uncertain delivery. Reads may fall back.
+            if body is not None and not isinstance(error.reason,socket.gaierror):raise
+            data=curl_private_request(BASE+path,headers,body)
         if len(data)>10*1024*1024:raise ValueError('Runner response exceeds read bound')
         return data if binary else json.loads(data)
 
@@ -71,7 +91,10 @@ class HUNTConnection:
         is_pdf=meta.get('media_type')=='application/pdf'
         if hashlib.sha256(data).hexdigest()!=meta['sha256'] or not data.startswith(b'%PDF-' if is_pdf else b'PK'):raise ValueError('Reviewed CV integrity check failed')
         directory=self.root/'data/application-files';directory.mkdir(parents=True,exist_ok=True,mode=0o700);directory.chmod(0o700)
-        target=directory/(meta['sha256']+('.pdf' if is_pdf else '.docx'))
+        filename=meta.get('filename') or ('CV.pdf' if is_pdf else 'CV.docx')
+        if Path(filename).name!=filename or not re.fullmatch(r'[A-Za-z0-9_. -]{1,180}',filename):raise ValueError('CV filename is invalid')
+        directory=directory/meta['sha256'];directory.mkdir(exist_ok=True,mode=0o700);directory.chmod(0o700)
+        target=directory/filename
         if target.exists():
             if hashlib.sha256(target.read_bytes()).hexdigest()!=meta['sha256']:raise ValueError('Local reviewed document changed')
         else:
@@ -84,14 +107,14 @@ class HUNTConnection:
         validate_context(current,payload)
 
 
-def validate_context(context,payload):
+def validate_context(context,payload,*,url_validator=lever_url):
     j=context['job'];p=context['package'];a=j['assessment'];cv=context['cv_artifact']
     if context.get('paused'):raise ValueError('HUNT is paused')
     if not j.get('open') or j.get('hidden'):raise ValueError('Role is closed or hidden')
     if j['id']!=payload['job_id'] or j['raw_hash']!=payload['job_version'] or p['id']!=payload['package_id'] or p['payload_hash']!=payload['package_hash'] or p['job_version']!=j['raw_hash']:raise ValueError('Job or reviewed package version changed')
     if p.get('status') in ('superseded','rejected','requires_revision') or not p.get('writing_profile_current') or not p.get('master_cv_current'):raise ValueError('Current reviewed CV wording and source are required')
     available=context.get('application_policy',{}).get('mode')=='apply_available'
-    if a.get('role_relevant') is False:raise ValueError('Role is outside the owner search')
+    if not available and a.get('role_relevant') is False:raise ValueError('Role is outside the owner search')
     if not available:
         if a.get('score',0)<85:raise ValueError('Role has not reached the priority fit threshold')
         if not j.get('publication_verified_original'):raise ValueError('Verify the employer-original posting date before automatic application')
@@ -102,12 +125,13 @@ def validate_context(context,payload):
     reviewed=payload.get('cv_artifact')
     if not reviewed or reviewed['sha256']!=cv['sha256'] or reviewed['package_hash']!=p['payload_hash']:raise ValueError('Reviewed CV file version changed')
     if not any(u['sha256']==cv['sha256'] for u in payload['uploads'].values()):raise ValueError('The exact reviewed CV must be attached')
-    expected=lever_url(j['application_url']).rstrip('/').removesuffix('/apply')
-    selected=lever_url(payload['application_url']).rstrip('/').removesuffix('/apply')
+    expected=url_validator(j['application_url']).rstrip('/').removesuffix('/apply')
+    selected=url_validator(payload['application_url']).rstrip('/').removesuffix('/apply')
     if expected!=selected:raise ValueError('Employer form does not match the selected job')
 
 
 class ProductionLeverAdapter:
+    browser_script_name='employer_browser.mjs'
     def __init__(self,url,node_executable=None,evidence_dir=None):
         self.url=lever_url(url)
         self.node=node_executable or shutil.which('node') or '/Users/theoneglobal/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node'
@@ -120,22 +144,34 @@ class ProductionLeverAdapter:
             runtime=Path('/Users/theoneglobal/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs')
             if runtime.exists():env.setdefault('HUNT_PLAYWRIGHT_MODULE',str(runtime))
             if Path('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome').exists():env.setdefault('HUNT_CHROME_EXECUTABLE','/Applications/Google Chrome.app/Contents/MacOS/Google Chrome')
-            self.process=subprocess.Popen([self.node,str(ROOT/'employer_browser.mjs'),self.url,str(self.evidence_dir)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,bufsize=1,env=env)
+            self.evidence_dir.mkdir(parents=True,exist_ok=True,mode=0o700)
+            fd=os.open(self.evidence_dir/'browser-stderr.log',os.O_CREAT|os.O_APPEND|os.O_WRONLY,0o600)
+            with os.fdopen(fd,'a') as errors:self.process=subprocess.Popen([self.node,str(ROOT/self.browser_script_name),self.url,str(self.evidence_dir)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=errors,text=True,bufsize=1,env=env)
         self.process.stdin.write(execution.encode({'command':command,**values})+'\n');self.process.stdin.flush()
         with selectors.DefaultSelector() as selector:
             selector.register(self.process.stdout,selectors.EVENT_READ)
-            if not selector.select(max(55,min(915,float(os.environ.get('HUNT_HUMAN_WAIT_MS','0'))/1000+15))):self.close();raise RuntimeError('Employer browser step timed out; no automatic retry')
+            if not selector.select(max(55,min(915,float(os.environ.get('HUNT_HUMAN_WAIT_MS','0'))/1000+15)) if command=='submit' else 55):self.close();raise RuntimeError('Employer browser step timed out; no automatic retry')
         line=self.process.stdout.readline()
         if not line:raise RuntimeError('Employer browser exited without a verified result')
         result=json.loads(line)
-        if result.get('ok') is not True:raise RuntimeError('Employer browser step could not be verified: '+result.get('error_type','Error')+': '+result.get('error','No detail'))
+        if result.get('ok') is not True:
+            target=self.evidence_dir/'browser-step-error.json';fd=os.open(target,os.O_CREAT|os.O_TRUNC|os.O_WRONLY,0o600)
+            with os.fdopen(fd,'w') as file:json.dump({'command':command,'error_type':result.get('error_type'),'error':result.get('error')},file)
+            raise RuntimeError('Employer browser step could not be verified: '+result.get('error_type','Error')+': '+result.get('error','No detail'))
         return result['result']
 
-    def inspect(self,payload=None):return self._call('inspect')
+    def inspect(self,payload=None):
+        result=self._call('inspect');self._inspection_count=getattr(self,'_inspection_count',0)+1
+        self.evidence_dir.mkdir(parents=True,exist_ok=True,mode=0o700);target=self.evidence_dir/('form-schema-'+hashlib.sha256(self.url.encode()).hexdigest()[:12]+'-'+str(self._inspection_count)+'.json')
+        fd=os.open(target,os.O_CREAT|os.O_TRUNC|os.O_WRONLY,0o600)
+        with os.fdopen(fd,'w') as file:json.dump(result,file)
+        return result
     def preflight(self,payload):
         if payload['form'].get('fixture_only') or payload['form'].get('provider')!='lever':raise ValueError('Exact production Lever form required')
         if lever_url(payload['application_url']).rstrip('/').removesuffix('/apply')!=self.url.rstrip('/').removesuffix('/apply'):raise ValueError('Browser is bound to a different employer job')
     def fill(self,payload):return self._call('fill',payload=payload)
+    def readiness(self):return self._call('readiness')
+    def resolve_location(self,value):return self._call('resolve-location',value=value)
     def submit(self,payload,idempotency_key):return self._call('submit',payload=payload,idempotency_key=idempotency_key)
     def close(self):
         if self.process:

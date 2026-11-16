@@ -58,11 +58,11 @@ export async function syncTracker(bucket,id,fetcher=fetch){
   }
   if(found>0)return save({status:'synced',range:'Applications!A'+(found+1)+':J'+(found+1),existing:true,verified_at:new Date().toISOString()});
   if(['uncertain','sending'].includes(row.tracker_sync?.status))return save({status:'uncertain',reason:'Earlier write is unconfirmed; no duplicate append was attempted'});
-  const sheetStatus=row.submission_receipt?'Application acknowledged':'Application reported';
+  const sheetStatus=row.submission_receipt?'Application acknowledged':row.email_submission_receipt?'Application emailed':'Application reported';
   const probe=await api('?includeGridData=true&ranges='+encodeURIComponent("'Applications'!A2:J2")+'&fields=sheets(data(rowData(values(userEnteredFormat,dataValidation))))');
   const template=probe.sheets?.[0]?.data?.[0]?.rowData?.[0]?.values||[];
   for(const [index,value]of [[5,sheetStatus],[7,'Monitor']]){const rule=template[index]?.dataValidation;if(rule&&(rule.condition?.type!=='ONE_OF_LIST'||!rule.condition.values?.some(x=>x.userEnteredValue===value)))throw Error('Tracker dropdown changed; no row was written');}
-  const serial=Math.max(0,...rows.slice(1).map(r=>Number(r[0])||0))+1,values=[serial,row.company,row.role,row.applied,'',sheetStatus,row.submission_receipt?'Employer form confirmation observed; no email verified':'Owner-reported submission; no employer reply verified','Monitor',row.evidence&&new URL(row.evidence).hostname==='mail.google.com'?row.evidence:'',marker+(row.submission_receipt?' | HUNT observed employer form confirmation; no email verified. Posting: ':' | Owner confirmed an application submitted outside HUNT. Employer acknowledgement not verified. Posting: ')+row.posting_url+(row.evidence?' | Evidence: '+row.evidence:'')+(row.notes?' | '+row.notes:'')];
+  const serial=Math.max(0,...rows.slice(1).map(r=>Number(r[0])||0))+1,values=[serial,row.company,row.role,row.applied,'',sheetStatus,row.submission_receipt?'Employer form confirmation observed; no email verified':row.email_submission_receipt?'Gmail accepted application email; employer acknowledgement pending':'Owner-reported submission; no employer reply verified','Monitor',row.evidence&&new URL(row.evidence).hostname==='mail.google.com'?row.evidence:'',marker+(row.submission_receipt?' | HUNT observed employer form confirmation; no email verified. Posting: ':row.email_submission_receipt?' | HUNT sent application email; employer acknowledgement pending. Posting: ':' | Owner confirmed an application submitted outside HUNT. Employer acknowledgement not verified. Posting: ')+row.posting_url+(row.evidence?' | Evidence: '+row.evidence:'')+(row.notes?' | '+row.notes:'')];
   const cells=values.map((value,i)=>{const cell={userEnteredValue:typeof value==='number'?{numberValue:value}:{stringValue:String(value)}};if(template[i]?.userEnteredFormat){cell.userEnteredFormat=structuredClone(template[i].userEnteredFormat);if(cell.userEnteredFormat.textFormat)delete cell.userEnteredFormat.textFormat.link;}if(template[i]?.dataValidation)cell.dataValidation=template[i].dataValidation;return cell;});
   await save({status:'sending',started_at:new Date().toISOString()});attempted=true;
   await api(':batchUpdate',{requests:[{appendCells:{sheetId:tab.properties.sheetId,rows:[{values:cells}],fields:'userEnteredValue,userEnteredFormat,dataValidation'}}]});
@@ -78,12 +78,13 @@ export function confirmedEmployerURL(job,body){
  const listing=new URL(job.original_application_url||job.url);let original=listing;
  const resolution=body.application_resolution;
  if(resolution){
-  if(listing.hostname!=='startup.jobs'||resolution.listing_url!==listing.href||resolution.company!==job.company||resolution.role!==job.title||resolution.verified_by!=='owner_desktop_employer_board')throw Error('Employer-link resolution does not match the saved listing');
+  if(resolution.listing_url!==listing.href||resolution.company!==job.company||resolution.role!==job.title||!['owner_desktop_employer_board','owner_desktop_apply_link'].includes(resolution.verified_by))throw Error('Employer-link resolution does not match the saved listing');
   original=new URL(resolution.employer_url);
-  if(original.hostname!==norm(job.company).replaceAll(' ','-')+'.breezy.hr')throw Error('Resolved employer does not match the selected company');
+  if((!resolution.provider||resolution.provider==='breezy')&&original.hostname!==norm(job.company).replaceAll(' ','-')+'.breezy.hr')throw Error('Resolved employer does not match the selected company');
  }
  const evidence=new URL(body.receipt.evidence_url);
  if(original.protocol!=='https:'||original.username||original.password||original.port||evidence.origin!==original.origin||evidence.username||evidence.password||evidence.port)throw Error('Confirmation evidence is outside the selected employer provider');
+ if(body.receipt.provider==='html'&&resolution?.provider==='html'&&resolution.verified_by==='owner_desktop_apply_link')return original;
  if(['jobs.lever.co','jobs.eu.lever.co'].includes(original.hostname))return original;
  if(!/^[-a-z0-9]+\.breezy\.hr$/.test(original.hostname)||original.hostname==='app.breezy.hr'||original.search||original.hash||!/^\/p\/[a-f0-9]{12}-[-a-z0-9]+(?:\/apply)?$/.test(original.pathname))throw Error('Unsupported employer confirmation provider');
  const position=original.pathname.replace(/\/apply$/,'');
@@ -94,6 +95,11 @@ export function confirmedEmployerURL(job,body){
 export async function recordConfirmedApplication(bucket,body,snapshot,fetcher=fetch){
  const job=snapshot.jobs.find(j=>j.id===body.job_id),p=snapshot.packages.find(p=>p.id===body.package_id),r=body.receipt;
  if(!job||!p||p.job_id!==job.id||p.payload_hash!==body.package_hash)throw Error('Application receipt does not match the job and package');
+ if(r?.channel==='email'){
+  if(r.fixture_only||r.submitted!==true||r.evidence_kind!=='provider_receipt'||r.sender!==ACCOUNT||!/^gmail-[a-f0-9]{8,40}$/.test(r.confirmation_id||'')||r.confirmation_id!=='gmail-'+r.gmail_message_id||!/^[a-f0-9]{8,40}$/.test(r.gmail_thread_id||'')||r.evidence_url!=='https://mail.google.com/mail/u/'+ACCOUNT+'/#sent/'+r.gmail_thread_id||!/^[-+._a-z0-9]+@[-.a-z0-9]+\.[a-z]{2,}$/i.test(r.recipient||''))throw Error('Confirmed owner Gmail send receipt required');
+  const id=await appId(job),key=PREFIX+id+'.json',prior=await read(bucket,key);if(prior?.email_submission_receipt&&prior.email_submission_receipt.confirmation_id!==r.confirmation_id)throw Error('A different email receipt exists; reconcile first');
+  const row={...prior,id,job_id:job.id,company:job.company,role:job.title,applied:prior?.applied||new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Lagos'}),status:'Application emailed',latest:new Date().toISOString(),evidence:r.evidence_url,posting_url:job.original_application_url||job.url,recorded_by:'hunt_runner',employer_acknowledged:false,employer_form_submitted_by_hunt:false,email_submission_receipt:{...r,package_id:p.id,package_hash:p.payload_hash,cv_sha256:body.cv_sha256},notes:'Gmail accepted the application email with its exact CV attachment. Employer acknowledgement is pending.',tracker_sync:prior?.tracker_sync||{status:'pending'}};await write(bucket,key,row);return {application:row,tracker_sync:await syncTracker(bucket,id,fetcher)};
+ }
  if(!r||r.fixture_only||r.submitted!==true||typeof r.confirmation_id!=='string'||r.confirmation_id.length>150||r.evidence_kind!=='confirmation_page'||typeof r.confirmation_text!=='string'||r.confirmation_text.length>2000||!/(?:application (?:has been|was) (?:successfully )?(?:submitted|received)|application submitted|thanks for applying|thank you for applying)/i.test(r.confirmation_text))throw Error('Positive production employer confirmation is required');
  const original=confirmedEmployerURL(job,body),evidence=new URL(r.evidence_url);
  const id=await appId(job),key=PREFIX+id+'.json',prior=await read(bucket,key);if(prior?.submission_receipt&&prior.submission_receipt.confirmation_id!==r.confirmation_id)throw Error('A different submission receipt already exists; reconcile before replacing it');

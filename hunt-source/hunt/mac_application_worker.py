@@ -23,14 +23,26 @@ def verified_contact_answers(form,context,root=ROOT):
     experience=source.partition('PROFESSIONAL EXPERIENCE')[2].partition('EDUCATION')[0]
     experience_lines=[line.strip() for line in experience.splitlines() if line.strip()]
     current_company=experience_lines[0].split('\t')[0].strip() if experience_lines and re.search(r'\bpresent\b',' '.join(experience_lines[:4]),re.I) else None
-    known={'company':current_company,'name':lines[0] if lines else None,'email':email.group(0) if email else None,'phone':re.sub(r'[^+\d]','',phone.group(0)) if phone else None}
+    profile_path=Path(root)/'data/owner-application-profile.json';profile=json.loads(profile_path.read_text()) if profile_path.exists() else {}
+    location=profile.get('current_location') if profile.get('verified') is True and profile.get('source')=='owner_explicit_statement' else None
+    linkedin=website=None
+    structured=Path(root)/'data/master-cv-structure.json'
+    if structured.exists():
+        from native_google_cv import paragraphs,text
+        _,_,rows=paragraphs(json.loads(structured.read_text()));canonical='\n'.join(text(row) for row in rows)+'\n'
+        if hashlib.sha256(canonical.encode()).hexdigest()==context['package'].get('master_cv_source_hash'):
+            links=[e.get('textRun',{}).get('textStyle',{}).get('link',{}).get('url','') for row in rows[:3] for e in row['paragraph']['elements']]
+            linkedin=next((url for url in links if url.startswith('https://www.linkedin.com/in/')),None)
+            website=next((url for url in links if url.startswith('https://aminatmajekadegbe.netlify.app')),None)
+    known={'location':location,'linkedin':linkedin,'website':website,'company':current_company,'name':lines[0] if lines else None,'email':email.group(0) if email else None,'phone':re.sub(r'[^+\d]','',phone.group(0)) if phone else None}
     answers={}
     for question in form['questions']:
         label=question['label'].lower().strip().rstrip('*✱').strip()
+        if question['id']=='id:location-input' and label.startswith('current location'):label='current location'
         # Only direct contact questions; never infer authorization, consent,
         # demographics, salary, availability, years, or role-specific claims.
-        field='name' if label in ('full name','name','your full name') else 'email' if label in ('email','email address','your email') else 'company' if label in ('current company','current employer') else 'phone' if label in ('phone','phone number','mobile phone','mobile number') else None
-        if field and known[field] and question['type'] in ('text','email','tel'):answers[question['id']]={'value':known[field],'source':'verified_profile','verified':True}
+        field='name' if label in ('full name','name','your full name') else 'email' if label in ('email','email address','your email') else 'location' if label in ('current location','location','city and country') else 'linkedin' if label in ('linkedin url','linkedin profile','linkedin') else 'website' if label in ('other website','website','portfolio url','portfolio') else 'company' if label in ('current company','current employer') else 'phone' if label in ('phone','phone number','mobile phone','mobile number') else None
+        if field and known[field] and question['type'] in ('text','email','tel','url'):answers[question['id']]={'value':known[field],'source':'verified_profile','verified':True}
     return answers
 
 
@@ -51,6 +63,8 @@ def process_candidate(client,candidate,engine,policy,root=ROOT,adapter_factory=P
         resume=[q for q in form['questions'] if q['type']=='file' and re.search(r'resume|\bcv\b',q['label'],re.I)]
         if len(resume)!=1:return {'status':'needs_input','message':'The exact resume field could not be identified. No data was filled.'}
         file=client.download_cv(context);answers=verified_contact_answers(form,context,root)
+        if 'id:location-input' in answers and callable(getattr(adapter,'resolve_location',None)):
+            supplied=answers['id:location-input']['value'];selected=adapter.resolve_location(supplied);form=adapter.inspect();answers=verified_contact_answers(form,context,root);answers['id:location-input']['value']=selected['value'];answers['id:location-input']['normalization']={'owner_provided':supplied,'employer_selection':selected['value']}
         plan=engine.plan(job_id=job_id,job_version=job['raw_hash'],package_id=package_id,package_hash=package['payload_hash'],form=form,answers=answers,uploads={resume[0]['id']:file},cv_artifact=context['cv_artifact'])
         result=execute_under_standing_authorization(engine,plan['id'],adapter,policy,Path(root)/'data')
         directory=Path(root)/'data/application-reviews';directory.mkdir(parents=True,exist_ok=True,mode=0o700)
@@ -63,6 +77,8 @@ def process_candidate(client,candidate,engine,policy,root=ROOT,adapter_factory=P
             fd=os.open(pending,os.O_CREAT|os.O_TRUNC|os.O_WRONLY,0o600)
             with os.fdopen(fd,'w') as file:json.dump(body,file)
             client.request('/api/application-receipt',body=body);pending.unlink()
+        if result['status']=='not_submitted':return {'status':'not_submitted','plan_id':plan['id'],'message':'The employer rejected the application verification. No confirmed application was recorded; this role needs manual security review.'}
+        if result['status']=='uncertain':return {'status':'uncertain','plan_id':plan['id'],'message':'The '+str(job.get('company','employer'))+' submission could not be confirmed. This role is held for reconciliation and will not be submitted again automatically.'}
         return {'status':result['status'],'plan_id':plan['id'],'message':'Employer confirmation saved.' if result['status']=='submitted' else 'Required facts, security checks or execution gates need attention; nothing new was submitted.'}
     finally:adapter.close()
 
@@ -84,9 +100,13 @@ def tick(root=ROOT):
         scan=client.request('/api/application-candidates')
         if scan['paused']:return report('paused','HUNT is paused. No applications will be attempted.')
         journal_path=directory/'autonomous-attempts.json';journal=json.loads(journal_path.read_text()) if journal_path.exists() else {}
-        candidates=[c for c in scan['candidates'] if execution.fingerprint([c['job_id'],c.get('job_version')]) not in journal]
+        held=engine.held_job_ids()
+        candidates=[c for c in scan['candidates'] if c['job_id'] not in held and execution.fingerprint([c['job_id'],c.get('job_version')]) not in journal]
         if not candidates:
-            if scan['candidates']:return report('needs_input','The saved candidate versions are paused or already attempted. No repeat application was attempted.')
+            if scan['candidates']:
+                pending=[journal.get(execution.fingerprint([c['job_id'],c.get('job_version')]),{}) for c in scan['candidates']]
+                message=next((p['message'] for p in pending if p.get('status')=='uncertain' and p.get('message')), 'Existing application attempts need review or have already completed. No repeat application was attempted.')
+                return report('needs_input',message)
             return report('idle','No unhidden, unapplied roles with a supported Lever form are available. No application was attempted.')
         report('running','Preparing one available role under your application policy.',len(candidates))
         try:

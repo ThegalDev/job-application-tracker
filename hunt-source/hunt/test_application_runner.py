@@ -2,6 +2,9 @@ import copy
 import hashlib
 import tempfile
 import unittest
+import socket
+from urllib.error import URLError
+from unittest.mock import patch,MagicMock
 from pathlib import Path
 from application_runner import HUNTConnection,validate_context,lever_url
 import application_execution as execution
@@ -14,13 +17,22 @@ class RunnerTests(unittest.TestCase):
         self.context={'paused':False,'job':{'id':'j','raw_hash':'v','open':True,'hidden':False,'within_discovery_window':True,'publication_verified_original':True,'global_remote':True,'application_url':URL,'assessment':{'tier':'A','score':90,'role_relevant':True,'compensation':{'status':'meets_floor','monthly_min':3000},'duplicate_applications':[]}},'package':{'id':'p','payload_hash':'hash','job_version':'v','status':'review','writing_profile_current':True,'master_cv_current':True},'cv_artifact':self.meta}
         self.payload={'job_id':'j','job_version':'v','package_id':'p','package_hash':'hash','cv_artifact':self.meta,'uploads':{'resume':{'sha256':self.sha}},'application_url':URL+'/apply'}
     def test_supported_exact_form_and_reviewed_file_pass(self):validate_context(self.context,self.payload)
+    def test_transport_fallback_only_retries_mutations_after_proven_dns_failure(self):
+        client=HUNTConnection('fixture-key');opener=MagicMock();opener.open.side_effect=URLError(socket.gaierror('fixture DNS failure'))
+        with patch('application_runner.build_opener',return_value=opener),patch('application_runner.curl_private_request',return_value=b'{"ok":true}') as fallback:self.assertTrue(client.request('/api/application-runner-status',body={'status':'idle'})['ok']);fallback.assert_called_once()
+        opener.open.side_effect=URLError('connection lost; delivery uncertain')
+        with patch('application_runner.build_opener',return_value=opener),patch('application_runner.curl_private_request') as fallback:
+            with self.assertRaises(URLError):client.request('/api/application-receipt',body={'receipt':'fixture'})
+            fallback.assert_not_called()
     def test_owner_available_mode_relaxes_preferences_but_not_identity_and_duplicates(self):
         ctx=copy.deepcopy(self.context);ctx['application_policy']={'mode':'apply_available'};ctx['job'].update(within_discovery_window=False,publication_verified_original=False,global_remote=False);ctx['job']['assessment'].update(tier='D',score=5,compensation={'status':'unknown'})
         validate_context(ctx,self.payload)
         for field,value in [('hidden',True),('open',False)]:
             bad=copy.deepcopy(ctx);bad['job'][field]=value
             with self.assertRaises(ValueError):validate_context(bad,self.payload)
-        for field,value in [('duplicate_applications',['already-applied']),('role_relevant',False)]:
+        ctx['job']['assessment']['role_relevant']=False
+        validate_context(ctx,self.payload)
+        for field,value in [('duplicate_applications',['already-applied'])]:
             bad=copy.deepcopy(ctx);bad['job']['assessment'][field]=value
             with self.assertRaises(ValueError):validate_context(bad,self.payload)
     def test_all_current_application_gates_fail_closed(self):
