@@ -38,7 +38,7 @@ export function inspectLeverDocument(){
    const forms=[...document.querySelectorAll('form')].filter(f=>f.querySelector('input[type="file"]')&&f.querySelector('input[name="email"]'));
    if(forms.length!==1)throw new Error('A unique Lever application form could not be inspected');
    const form=forms[0];
-   const visible=e=>!!(e.getClientRects().length)&&getComputedStyle(e).visibility!=='hidden';
+   const visible=e=>{const r=e.getBoundingClientRect();return r.width>0&&r.height>0&&getComputedStyle(e).visibility!=='hidden'};
    const controls=[...form.querySelectorAll('input,textarea,select')].filter(e=>!['hidden','submit','button','reset'].includes(e.type)&&(visible(e)||e.type==='file'));
    const counts=new Map();for(const e of controls)counts.set(e.name,(counts.get(e.name)||0)+1);
    const seen=new Set(),questions=[];
@@ -123,7 +123,9 @@ async function main(){
   if(JSON.stringify(await readPreview(payload))!==JSON.stringify(expected))throw new Error('Filled form changed after review; submission blocked');
   const beforeURL=page.url();
   stage='submit';await saveEvidence('before-submit',ident);await button.click();
-  const positive=page.getByText(/(?:your application (?:has been|was) (?:successfully )?(?:submitted|received)|application submitted|thanks for applying|thank you for applying)/i).first();await positive.waitFor({state:'visible',timeout:20000});
+  const humanWait=Math.min(900000,Number(process.env.HUNT_HUMAN_WAIT_MS)||20000);let humanNotice=false;
+  const monitor=process.env.HUNT_BROWSER_VISIBLE==='1'?setInterval(async()=>{try{if(!humanNotice&&(await page.evaluate(inspectLeverDocument)).captcha){humanNotice=true;await import('node:fs/promises').then(fs=>fs.writeFile(path.join(evidenceDir,'human-check-required.json'),JSON.stringify({url:page.url(),message:'Complete the employer security check in the visible browser. The submit button has already been clicked once; do not click it again.'}),{mode:0o600}));}}catch{}},1000):null;
+  const positive=page.getByText(/(?:your application (?:has been|was) (?:successfully )?(?:submitted|received)|application submitted|thanks for applying|thank you for applying)/i).first();try{await positive.waitFor({state:'visible',timeout:humanWait})}finally{if(monitor)clearInterval(monitor)};
   if(page.url()===beforeURL&&await form.isVisible())throw new Error('Form remains visible; employer confirmation is not sufficiently distinct');
   const text=await positive.innerText();const result=confirmationEvidence({text,url:page.url(),applicationURL:payload.application_url,idempotencyKey:ident});
   if(!result)throw new Error('No positive employer confirmation was observed');

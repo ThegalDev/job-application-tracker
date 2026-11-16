@@ -124,7 +124,7 @@ class ProductionLeverAdapter:
         self.process.stdin.write(execution.encode({'command':command,**values})+'\n');self.process.stdin.flush()
         with selectors.DefaultSelector() as selector:
             selector.register(self.process.stdout,selectors.EVENT_READ)
-            if not selector.select(55):self.close();raise RuntimeError('Employer browser step timed out; no automatic retry')
+            if not selector.select(max(55,min(915,float(os.environ.get('HUNT_HUMAN_WAIT_MS','0'))/1000+15))):self.close();raise RuntimeError('Employer browser step timed out; no automatic retry')
         line=self.process.stdout.readline()
         if not line:raise RuntimeError('Employer browser exited without a verified result')
         result=json.loads(line)
